@@ -1,0 +1,6 @@
+# Copy this file to `config` beside it and fill it in. `config` is ignored
+# by version control: it names your server, and your server is not the
+# repository's business.
+
+# Who and where to reach over SSH, as ssh itself would take it.
+SERVER="user@host"

@@ -1,0 +1,12 @@
+{
+  "name": "ai-sessions",
+  "version": "0.1.0",
+  "description": "Lists the sessions a server keeps running and puts you back into one.",
+  "private": true,
+  "scripts": {
+    "test": "bats tests"
+  },
+  "devDependencies": {
+    "bats": "1.13.0"
+  }
+}

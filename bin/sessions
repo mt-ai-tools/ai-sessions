@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# The way back into a session running on the server — the thin orchestrator.
+#
+#   sessions                 list what runs there, pick one, attach
+#   sessions list            list only
+#   sessions open <name>     attach to a session by name
+#   sessions new <name> <dir>   start a session in a folder on the server, attach
+#
+# A session is a tmux session on the server; every one of them survives the
+# laptop's connection going away. Attaching to one already attached elsewhere
+# shares it, which is the point of continuing from another machine.
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+tool_root="$(cd "$here/.." && pwd)"
+. "$tool_root/lib/config.sh"
+. "$tool_root/lib/remote.sh"
+. "$tool_root/lib/listing.sh"
+
+usage() {
+  sed -n '2,8p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  exit 1
+}
+
+# What a new session runs. A login shell so the server's own PATH — where a
+# per-user tool like claude lives — is the one in effect, and the session
+# ends when that command does.
+NEW_SESSION_COMMAND='bash -lc claude'
+
+fetch_listing() {
+  remote_run "$(list_panes_command)"
+}
+
+cmd_list() {
+  local raw
+  raw="$(fetch_listing)"
+  if [ -z "$raw" ]; then
+    echo "no sessions running on $SERVER"
+    return 0
+  fi
+  printf '%s\n' "$raw" | format_listing
+}
+
+cmd_open() {
+  local name="${1:?sessions open <name>}"
+  remote_terminal "tmux attach -t $(printf %q "$name")"
+}
+
+cmd_new() {
+  local name="${1:?sessions new <name> <dir>}" dir="${2:?sessions new <name> <dir>}"
+  remote_terminal "tmux new-session -A -s $(printf %q "$name") -c $(printf %q "$dir") $(printf %q "$NEW_SESSION_COMMAND")"
+}
+
+# No argument: the list becomes a menu. The shell's own chooser, so nothing
+# has to be installed on the machine that runs this — and read in a loop
+# rather than in one call, since the bash a Mac ships is too old for that.
+cmd_pick() {
+  local raw names=() name
+  raw="$(fetch_listing)"
+  if [ -z "$raw" ]; then
+    echo "no sessions running on $SERVER"
+    return 0
+  fi
+  printf '%s\n' "$raw" | format_listing
+  echo
+  while IFS= read -r name; do names+=("$name"); done < <(printf '%s\n' "$raw" | listing_names)
+  PS3="open which? "
+  select name in "${names[@]}"; do
+    [ -n "${name:-}" ] || continue
+    cmd_open "$name"
+    return
+  done
+}
+
+load_config
+
+case "${1:-}" in
+  "")     cmd_pick ;;
+  list)   cmd_list ;;
+  open)   shift; cmd_open "$@" ;;
+  new)    shift; cmd_new "$@" ;;
+  *)      usage ;;
+esac
