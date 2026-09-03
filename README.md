@@ -49,7 +49,7 @@ folder.
 `scripts/listen.command` asks the server which tmux sessions it keeps
 running and writes the sessions folder: one file per tmux session, named
 after it. It keeps asking, every minute unless the config says otherwise,
-until you close it. Open a file and a terminal attaches to that tmux
+until you stop it. Open a file and a terminal attaches to that tmux
 session; close the window and it keeps running.
 
 Open the files in a terminal.
