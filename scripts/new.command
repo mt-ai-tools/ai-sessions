@@ -17,7 +17,8 @@ NEW_SESSION_COMMAND='bash -lc claude'
 load_config
 wipe
 read -r -p "session name: " name
-read -r -p "folder on the server (relative to home, or absolute): " dir
+echo "work path on the server, relative to home or absolute"
+read -r -p "work path: " dir
 [ -n "$name" ] && [ -n "$dir" ] || { echo "both are needed" >&2; exit 1; }
 
 dir="$(resolve_remote_dir "$dir")"
