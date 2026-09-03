@@ -81,4 +81,20 @@ out="$(bash -c ". '$tool/helpers/config.sh' && load_config && printf '%s' \"\$RE
 [ "$out" = "5" ] || fail "config must set the refresh seconds (got '$out')"
 ok "clock"
 
+# --- listen: one round against the fake server prints the header and the
+# table. Started in the background and stopped after a moment, since it
+# never ends on its own.
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" %q\n' $'notes\t/home/me/notes\tclaude\t0' >"$tmp/fakebin/ssh"
+printf 'SERVER="dev@fake"\nREFRESH_SECONDS=1\n' >"$tool/config"
+PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/listen.command" >"$tmp/listen.out" 2>&1 &
+listen_pid=$!
+sleep 2
+kill "$listen_pid" 2>/dev/null || true
+wait "$listen_pid" 2>/dev/null || true
+out="$(tr -d '\033' <"$tmp/listen.out")"
+case "$out" in *"tmux sessions on:"*"dev@fake"*) ;; *) fail "listen must print its header (got '$out')" ;; esac
+case "$out" in *"refresh rate:"*"1s"*) ;; *) fail "listen must show the refresh rate" ;; esac
+case "$out" in *SESSION*notes*~/notes*) ;; *) fail "listen must print the table (got '$out')" ;; esac
+ok "listen"
+
 echo "all checks passed"
