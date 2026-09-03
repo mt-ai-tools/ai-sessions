@@ -23,8 +23,8 @@ printf '\033]0;%s\007' "tmux sessions on $SERVER"
 # The header's lines, label and value, with every label padded to the
 # longest so the values stand in one column.
 header() {
-  local labels=("tmux sessions on" "refreshed at" "refresh rate" "to stop")
-  local values=("$SERVER" "$(date '+%H:%M:%S')" "${REFRESH_SECONDS}s" "close this window")
+  local labels=("tmux sessions on" "refreshed at" "refresh rate")
+  local values=("$SERVER" "$(date '+%H:%M:%S')" "${REFRESH_SECONDS}s")
   local width=0 i
   for i in "${labels[@]}"; do [ ${#i} -gt $width ] && width=${#i}; done
   for i in "${!labels[@]}"; do printf '%-*s  %s\n' "$((width + 1))" "${labels[$i]}:" "${values[$i]}"; done
@@ -35,5 +35,7 @@ while true; do
   header
   echo
   bash "$root/helpers/refresh.sh" || true
+  echo
+  echo "close this window to stop"
   sleep "$REFRESH_SECONDS"
 done
