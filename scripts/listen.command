@@ -33,7 +33,6 @@ header() {
 while true; do
   wipe
   header
-  echo "stop this process to stop listening"
   echo
   bash "$root/helpers/refresh.sh" || true
   sleep "$REFRESH_SECONDS"
