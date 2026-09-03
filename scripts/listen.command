@@ -33,9 +33,8 @@ header() {
 while true; do
   wipe
   header
+  echo "close this window to stop"
   echo
   bash "$root/helpers/refresh.sh" || true
-  echo
-  echo "close this window to stop"
   sleep "$REFRESH_SECONDS"
 done
