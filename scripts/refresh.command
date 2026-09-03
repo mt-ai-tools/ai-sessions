@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Asks the server what it keeps running and rewrites the sessions folder to
-# match: one double-clickable file per session. Double-click this first;
-# then double-click a session.
+# match: one runnable file per session. Open this in a terminal first;
+# then open a session's file.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/.." && pwd)"
@@ -25,4 +25,4 @@ while IFS= read -r name; do
   write_session_file "$name"
 done < <(printf '%s\n' "$raw" | listing_names)
 echo
-echo "each is now a file in $SESSIONS_DIR — double-click one to attach"
+echo "each is now a file in $SESSIONS_DIR — open one in a terminal to attach"

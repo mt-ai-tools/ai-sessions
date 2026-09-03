@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # The sessions folder: one runnable file per session, written by refresh
-# and opened by a double-click. Sourced, never executed.
+# and opened in a terminal. Sourced, never executed.
 
 SESSIONS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/sessions"
 
-# The suffix that makes a file open in a terminal on a double-click.
+# The suffix that makes a file open in a terminal from a file manager.
 SESSION_FILE_SUFFIX=".command"
 
 # Writes the file for one session. Each file only names its session and
@@ -16,7 +16,7 @@ write_session_file() {
   cat >"$file" <<EOT
 #!/usr/bin/env bash
 # Written by refresh for the session named below; the next refresh rewrites
-# it. Double-click to attach.
+# it. Open in a terminal to attach.
 exec "\$(dirname "\${BASH_SOURCE[0]}")/../helpers/attach.sh" $(printf %q "$name")
 EOT
   chmod +x "$file"

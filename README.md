@@ -41,9 +41,7 @@ file and a terminal attaches to it; close the window and the session keeps
 running. `scripts/new.command` asks for a name and a folder on the server,
 starts Claude there inside tmux, and attaches.
 
-On macOS, double-click the files. On Linux, run them from a terminal, for
-example `bash scripts/refresh.command`, or set your file manager to run
-scripts on a click.
+Open the files in a terminal.
 
 The sessions folder is a snapshot from the last refresh. A session started
 elsewhere shows up on the next one, provided it was started inside tmux.
