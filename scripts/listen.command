@@ -20,11 +20,19 @@ wipe() { printf '\033[2J\033[3J\033[H'; }
 # watching instead of which process it is running.
 printf '\033]0;%s\007' "tmux sessions on $SERVER"
 
+# The header's lines, label and value, with every label padded to the
+# longest so the values stand in one column.
+header() {
+  local labels=("tmux sessions on" "refreshed at" "refresh rate" "to stop")
+  local values=("$SERVER" "$(date '+%H:%M:%S')" "${REFRESH_SECONDS}s" "close this window")
+  local width=0 i
+  for i in "${labels[@]}"; do [ ${#i} -gt $width ] && width=${#i}; done
+  for i in "${!labels[@]}"; do printf '%-*s  %s\n' "$((width + 1))" "${labels[$i]}:" "${values[$i]}"; done
+}
+
 while true; do
   wipe
-  echo "tmux sessions on $SERVER"
-  echo "as of $(date '+%H:%M:%S'), asked again every ${REFRESH_SECONDS}s"
-  echo "close this window to stop"
+  header
   echo
   bash "$root/helpers/refresh.sh" || true
   sleep "$REFRESH_SECONDS"
