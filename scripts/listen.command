@@ -7,6 +7,7 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/.." && pwd)"
 . "$root/helpers/config.sh"
+. "$root/helpers/remote.sh"
 
 load_config
 export SERVER TMUX_SESSIONS="${TMUX_SESSIONS:-}"
