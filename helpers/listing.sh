@@ -16,7 +16,7 @@ list_panes_command() {
   printf 'tmux list-panes -a -F %q 2>/dev/null || true' "$TMUX_PANE_FORMAT"
 }
 
-# Turns tmux's lines into the table a developer reads: name, folder with
+# Turns tmux's lines into the table you read: name, folder with
 # the home shortened, what runs there, and whether it is already attached.
 # Reads stdin, writes stdout. Nothing else happens here.
 format_listing() {

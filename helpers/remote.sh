@@ -16,7 +16,7 @@ remote_run() {
   ssh -o LogLevel=ERROR "${SSH_KEEPALIVE[@]}" "$SERVER" "$@"
 }
 
-# Hands the developer's terminal to a command on the server. For attaching
+# Hands your terminal to a command on the server. For attaching
 # to a session, which needs a terminal on both ends.
 remote_terminal() {
   ssh -t "${SSH_KEEPALIVE[@]}" "$SERVER" "$@"
