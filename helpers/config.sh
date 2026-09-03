@@ -6,9 +6,9 @@ CONFIG_FILE="$(dirname "${BASH_SOURCE[0]}")/../config"
 CONFIG_SAMPLE="$(dirname "${BASH_SOURCE[0]}")/../config.sample"
 
 # How often the listen script asks the server again, in seconds, unless the
-# config says otherwise. A minute is slow enough to cost nothing and fast
-# enough that a session started elsewhere is not long in appearing.
-DEFAULT_REFRESH_SECONDS=60
+# config says otherwise. Half a minute is slow enough to cost nothing and
+# fast enough that a session started elsewhere is not long in appearing.
+DEFAULT_REFRESH_SECONDS=30
 
 # Loads the config into the caller's shell. Missing or incomplete, it says
 # where the sample is and fails: a tool that guessed a server would connect

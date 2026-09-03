@@ -7,7 +7,7 @@
 SERVER="user@host"
 
 # How often the listen script asks the server again, in seconds. Leave it
-# empty for the default of a minute.
+# empty for the default of half a minute.
 REFRESH_SECONDS=""
 
 # Which tmux sessions to show, by their tmux names, separated by spaces.

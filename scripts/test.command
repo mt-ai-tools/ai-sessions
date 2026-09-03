@@ -75,7 +75,7 @@ ok "refresh"
 
 # --- the clock: the default holds when the config is silent, the config wins
 out="$(bash -c ". '$tool/helpers/config.sh' && load_config && printf '%s' \"\$REFRESH_SECONDS\"")"
-[ "$out" = "60" ] || fail "refresh seconds must default to a minute (got '$out')"
+[ "$out" = "30" ] || fail "refresh seconds must default to half a minute (got '$out')"
 printf 'SERVER="dev@fake"\nREFRESH_SECONDS=5\n' >"$tool/config"
 out="$(bash -c ". '$tool/helpers/config.sh' && load_config && printf '%s' \"\$REFRESH_SECONDS\"")"
 [ "$out" = "5" ] || fail "config must set the refresh seconds (got '$out')"
