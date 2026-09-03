@@ -16,25 +16,45 @@ list_panes_command() {
   printf 'tmux list-panes -a -F %q 2>/dev/null || true' "$TMUX_PANE_FORMAT"
 }
 
-# The table's columns, sized to fit an 80-column window with room to spare:
-# name, folder, what runs there, whether someone has it open.
-LISTING_ROW='%-16s %-36s %-8s %s\n'
+# The table's headings, in column order: name, folder, what runs there,
+# whether someone has it open.
+LISTING_HEADINGS="SESSION FOLDER RUNS OPENED"
 
-# The table's heading, in the same shape as its rows.
-listing_heading() {
-  printf "$LISTING_ROW" "SESSION" "FOLDER" "RUNS" "OPENED"
-}
+# The space between columns.
+LISTING_GAP="   "
 
-# Turns tmux's lines into the table you read: name, folder with the home
-# shortened, what runs there, and whether it is already attached. Reads
-# stdin, writes stdout. Nothing else happens here.
+# Turns tmux's lines into the table you read, headed. Each column is as
+# wide as its longest cell, heading included, so nothing is cut and nothing
+# wastes room. The home folder is shortened to ~ on the way. Reads stdin,
+# writes stdout. Nothing else happens here.
 format_listing() {
-  local name path command attached
-  while IFS="$LISTING_TAB" read -r name path command attached; do
-    [ -n "$name" ] || continue
-    printf "$LISTING_ROW" "$name" "${path/#\/home\/*\//~/}" "$command" \
-      "$([ "$attached" != "0" ] && echo yes || echo -)"
-  done
+  awk -F "$LISTING_TAB" -v headings="$LISTING_HEADINGS" -v gap="$LISTING_GAP" '
+    function pad(n,   s) { s = ""; while (n-- > 0) s = s " "; return s }
+    BEGIN {
+      cols = split(headings, head, " ")
+      for (i = 1; i <= cols; i++) { cell[0, i] = head[i]; width[i] = length(head[i]) }
+      rows = 0
+    }
+    $1 == "" { next }
+    {
+      rows++
+      folder = $2
+      sub(/^\/(home|Users)\/[^\/]+\//, "~/", folder)
+      sub(/^\/(home|Users)\/[^\/]+$/, "~", folder)
+      cell[rows, 1] = $1; cell[rows, 2] = folder; cell[rows, 3] = $3
+      cell[rows, 4] = ($4 != "0") ? "yes" : "-"
+      for (i = 1; i <= cols; i++) if (length(cell[rows, i]) > width[i]) width[i] = length(cell[rows, i])
+    }
+    END {
+      for (r = 0; r <= rows; r++) {
+        line = ""
+        for (i = 1; i <= cols; i++) {
+          line = line cell[r, i]
+          if (i < cols) line = line pad(width[i] - length(cell[r, i])) gap
+        }
+        print line
+      }
+    }'
 }
 
 # The names alone, one per line.
