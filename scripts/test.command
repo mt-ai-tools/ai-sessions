@@ -58,7 +58,7 @@ case "$out" in *notes*recipes*) ;; *) fail "refresh must print the table (got '$
 [ -x "$tool/sessions/notes.command" ] && [ -x "$tool/sessions/recipes.command" ] || fail "refresh must write one file per session"
 printf '#!/usr/bin/env bash\nprintf ""\n' >"$tmp/fakebin/ssh"
 out="$(PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/refresh.command")"
-case "$out" in *"no sessions running on dev@fake"*) ;; *) fail "no sessions must be said plainly" ;; esac
+case "$out" in *"no tmux sessions running on dev@fake"*) ;; *) fail "no sessions must be said plainly" ;; esac
 [ -e "$tool/sessions/notes.command" ] && fail "refresh must clear files for sessions that are gone"
 ok "refresh"
 

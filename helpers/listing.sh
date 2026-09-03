@@ -33,8 +33,8 @@ listing_names() {
   cut -f1
 }
 
-# Keeps only the lines whose session is among the names given, separated by
-# spaces. Given nothing, keeps everything: an empty choice is no choice.
+# Keeps only the lines whose tmux session is among the names given,
+# separated by spaces. Given nothing, keeps everything: an empty choice is no choice.
 # Reads stdin, writes stdout.
 filter_listing() {
   local wanted="$1" name rest

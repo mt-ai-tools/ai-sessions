@@ -35,27 +35,28 @@ Any machine you can reach over SSH, wherever it is hosted. It needs:
 
 ## Use
 
-A session is one Claude running in one folder on the server, kept alive
-by tmux under a name you give it. Several projects on the server are
-several sessions, one per project, each in its own folder; two Claudes on
-one project are two sessions. The folder is chosen when a session is
-started, never in the config.
+A session here is a tmux session on the server with one Claude running
+in one folder, under the tmux name you give it. Several projects on the
+server are several tmux sessions, one per project, each in its own
+folder; two Claudes on one project are two tmux sessions. The folder is
+chosen when a tmux session is started, never in the config.
 
-`scripts/new.command` asks for a name and a folder on the server, starts
-Claude there inside tmux, and attaches. The name becomes the file's name,
-so name a session the way you want to see it in the folder.
+`scripts/new.command` asks for a tmux name and a folder on the server,
+starts Claude there inside tmux, and attaches. The tmux name becomes the
+file's name, so name a tmux session the way you want to see it in the
+folder.
 
-`scripts/refresh.command` asks the server what it keeps running and writes
-the sessions folder: one file per session, named after it. Open a session's
-file and a terminal attaches to it; close the window and the session keeps
-running.
+`scripts/refresh.command` asks the server which tmux sessions it keeps
+running and writes the sessions folder: one file per tmux session, named
+after it. Open a file and a terminal attaches to that tmux session; close
+the window and it keeps running.
 
 Open the files in a terminal.
 
-The sessions folder is a snapshot from the last refresh. A session started
-elsewhere shows up on the next one, provided it was started inside tmux.
-On a server shared with others, the config can name the sessions to show;
-left empty, every session is shown.
+The sessions folder is a snapshot from the last refresh. A tmux session
+started elsewhere shows up on the next one; a Claude started outside tmux
+never does. On a server shared with others, the config can name the tmux
+sessions to show; left empty, every tmux session is shown.
 
 ## Develop
 
