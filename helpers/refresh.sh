@@ -18,10 +18,12 @@ if [ -z "$raw" ]; then
   exit 0
 fi
 
+listing_heading
 printf '%s\n' "$raw" | format_listing
 while IFS= read -r name; do
   [ -n "$name" ] || continue
   write_session_file "$name"
 done < <(printf '%s\n' "$raw" | listing_names)
 echo
-echo "each is now a file in $SESSIONS_DIR — open one in a terminal to attach"
+echo "each is a file in the sessions folder next to this script;"
+echo "open one in a terminal to attach"

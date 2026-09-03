@@ -11,9 +11,15 @@ root="$(cd "$here/.." && pwd)"
 load_config
 export SERVER TMUX_SESSIONS="${TMUX_SESSIONS:-}"
 
+# Wipes the screen and its scrollback, then homes the cursor, so each round
+# replaces the last instead of piling under it. Spelled out rather than left
+# to the clear command, whose output differs between terminals.
+wipe() { printf '\033[2J\033[3J\033[H'; }
+
 while true; do
-  clear
-  echo "tmux sessions on $SERVER — $(date '+%H:%M:%S'), again in ${REFRESH_SECONDS}s, close this window to stop"
+  wipe
+  printf '%-40s %s\n' "$SERVER" "$(date '+%H:%M:%S')"
+  echo "every ${REFRESH_SECONDS}s; close this window to stop"
   echo
   bash "$root/helpers/refresh.sh" || true
   sleep "$REFRESH_SECONDS"

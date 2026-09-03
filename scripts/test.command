@@ -32,7 +32,7 @@ out="$(bash -c ". '$root/helpers/listing.sh' && printf '%s\n' 'notes${tab}/home/
 case "$out" in *notes*~/notes*claude*) ;; *) fail "listing row not formatted (got '$out')" ;; esac
 case "$out" in *" -") ;; *) fail "unattached must show as -" ;; esac
 out="$(bash -c ". '$root/helpers/listing.sh' && printf '%s\n' 'notes${tab}/x${tab}claude${tab}1' | format_listing")"
-case "$out" in *attached) ;; *) fail "attached must say so" ;; esac
+case "$out" in *yes) ;; *) fail "attached must say yes" ;; esac
 out="$(bash -c ". '$root/helpers/listing.sh' && list_panes_command")"
 case "$out" in *"tmux list-panes -a -F"*"|| true") ;; *) fail "server asked in tmux's format, quiet without a server" ;; esac
 out="$(bash -c ". '$root/helpers/listing.sh' && printf '%s\n' 'notes${tab}/a${tab}claude${tab}0' 'recipes${tab}/b${tab}claude${tab}0' | filter_listing 'recipes other'")"

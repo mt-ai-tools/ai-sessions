@@ -16,15 +16,24 @@ list_panes_command() {
   printf 'tmux list-panes -a -F %q 2>/dev/null || true' "$TMUX_PANE_FORMAT"
 }
 
-# Turns tmux's lines into the table you read: name, folder with
-# the home shortened, what runs there, and whether it is already attached.
-# Reads stdin, writes stdout. Nothing else happens here.
+# The table's columns, sized to fit an 80-column window with room to spare:
+# name, folder, what runs there, whether someone is attached.
+LISTING_ROW='%-16s %-36s %-8s %s\n'
+
+# The table's heading, in the same shape as its rows.
+listing_heading() {
+  printf "$LISTING_ROW" "SESSION" "FOLDER" "RUNS" "ATTACHED"
+}
+
+# Turns tmux's lines into the table you read: name, folder with the home
+# shortened, what runs there, and whether it is already attached. Reads
+# stdin, writes stdout. Nothing else happens here.
 format_listing() {
   local name path command attached
   while IFS="$LISTING_TAB" read -r name path command attached; do
     [ -n "$name" ] || continue
-    printf '%-14s %-40s %-10s %s\n' "$name" "${path/#\/home\/*\//~/}" "$command" \
-      "$([ "$attached" != "0" ] && echo attached || echo -)"
+    printf "$LISTING_ROW" "$name" "${path/#\/home\/*\//~/}" "$command" \
+      "$([ "$attached" != "0" ] && echo yes || echo -)"
   done
 }
 
