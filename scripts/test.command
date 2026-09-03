@@ -35,6 +35,11 @@ out="$(bash -c ". '$root/helpers/listing.sh' && printf '%s\n' 'notes${tab}/x${ta
 case "$out" in *attached) ;; *) fail "attached must say so" ;; esac
 out="$(bash -c ". '$root/helpers/listing.sh' && list_panes_command")"
 case "$out" in *"tmux list-panes -a -F"*"|| true") ;; *) fail "server asked in tmux's format, quiet without a server" ;; esac
+out="$(bash -c ". '$root/helpers/listing.sh' && printf '%s\n' 'notes${tab}/a${tab}claude${tab}0' 'recipes${tab}/b${tab}claude${tab}0' | filter_listing 'recipes other'")"
+case "$out" in recipes*) ;; *) fail "filter must keep only the named sessions (got '$out')" ;; esac
+case "$out" in *notes*) fail "filter must drop sessions not named" ;; esac
+out="$(bash -c ". '$root/helpers/listing.sh' && printf '%s\n' 'notes${tab}/a${tab}claude${tab}0' 'recipes${tab}/b${tab}claude${tab}0' | filter_listing ''")"
+case "$out" in *notes*recipes*) ;; *) fail "an empty filter must keep everything" ;; esac
 ok "listing"
 
 # --- session file

@@ -11,11 +11,11 @@ root="$(cd "$here/.." && pwd)"
 . "$root/helpers/sessions-dir.sh"
 
 load_config
-raw="$(remote_run "$(list_panes_command)")"
+raw="$(remote_run "$(list_panes_command)" | filter_listing "${SESSIONS:-}")"
 
 clear_session_files
 if [ -z "$raw" ]; then
-  echo "no sessions running on $SERVER"
+  echo "no sessions running on $SERVER${SESSIONS:+ named $SESSIONS}"
   exit 0
 fi
 

@@ -32,3 +32,14 @@ format_listing() {
 listing_names() {
   cut -f1
 }
+
+# Keeps only the lines whose session is among the names given, separated by
+# spaces. Given nothing, keeps everything: an empty choice is no choice.
+# Reads stdin, writes stdout.
+filter_listing() {
+  local wanted="$1" name rest
+  [ -n "$wanted" ] || { cat; return; }
+  while IFS="$LISTING_TAB" read -r name rest; do
+    case " $wanted " in *" $name "*) printf '%s%s%s\n' "$name" "$LISTING_TAB" "$rest" ;; esac
+  done
+}
