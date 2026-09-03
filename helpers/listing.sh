@@ -28,7 +28,7 @@ format_listing() {
   done
 }
 
-# The names alone, one per line, for picking.
+# The names alone, one per line.
 listing_names() {
   cut -f1
 }

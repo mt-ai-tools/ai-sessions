@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Starts a session on the server, in a folder there, and attaches to it.
+# Asks for the name and the folder; the folder is as the server sees it.
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root="$(cd "$here/.." && pwd)"
+. "$root/helpers/config.sh"
+. "$root/helpers/remote.sh"
+. "$root/helpers/sessions-dir.sh"
+
+# What a new session runs. A login shell so the server's own PATH — where a
+# per-user tool like claude lives — is the one in effect, and the session
+# ends when that command does.
+NEW_SESSION_COMMAND='bash -lc claude'
+
+load_config
+read -r -p "session name: " name
+read -r -p "folder on the server: " dir
+[ -n "$name" ] && [ -n "$dir" ] || { echo "both are needed" >&2; exit 1; }
+
+write_session_file "$name"
+remote_terminal "tmux new-session -A -s $(printf %q "$name") -c $(printf %q "$dir") $(printf %q "$NEW_SESSION_COMMAND")"

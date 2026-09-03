@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Where the config lives and what it must hold — in one place, so every
-# entry reads the same file and fails the same way. Sourced, never executed.
+# script reads the same file and fails the same way. Sourced, never executed.
 
 CONFIG_FILE="$(dirname "${BASH_SOURCE[0]}")/../config"
 CONFIG_SAMPLE="$(dirname "${BASH_SOURCE[0]}")/../config.sample"
