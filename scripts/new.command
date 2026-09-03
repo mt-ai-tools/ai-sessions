@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Starts a session on the server, in a folder there, and attaches to it.
-# Asks for the name and the folder; the folder is as the server sees it.
+# Asks for the name and the folder; the folder is as the server sees it,
+# relative to the login user's home or absolute, and must exist.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/.." && pwd)"
@@ -16,8 +17,9 @@ NEW_SESSION_COMMAND='bash -lc claude'
 load_config
 wipe
 read -r -p "session name: " name
-read -r -p "folder on the server: " dir
+read -r -p "folder on the server (relative to home, or absolute): " dir
 [ -n "$name" ] && [ -n "$dir" ] || { echo "both are needed" >&2; exit 1; }
 
+dir="$(resolve_remote_dir "$dir")"
 write_session_file "$name"
 remote_terminal "tmux new-session -A -s $(printf %q "$name") -c $(printf %q "$dir") $(printf %q "$NEW_SESSION_COMMAND")"

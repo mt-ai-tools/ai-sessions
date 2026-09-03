@@ -22,6 +22,20 @@ remote_run() {
 # terminal printed while starting it is gone.
 wipe() { printf '\033[2J\033[3J\033[H'; }
 
+# Resolves a folder as the server sees it — relative to the login user's
+# home, a leading ~ expanded, or absolute — to its absolute path there.
+# Fails, saying so, when the folder does not exist: tmux would otherwise
+# start the session in the home folder without a word.
+resolve_remote_dir() {
+  local dir="$1" resolved
+  resolved="$(remote_run "d=$(printf %q "$dir"); case \"\$d\" in '~'|'~/'*) d=\"\$HOME\${d#'~'}\";; esac; cd -- \"\$d\" 2>/dev/null && pwd")" || true
+  if [ -z "$resolved" ]; then
+    echo "ai-sessions: no such folder on the server: $dir" >&2
+    return 1
+  fi
+  printf '%s' "$resolved"
+}
+
 # Hands your terminal to a command on the server. For attaching
 # to a session, which needs a terminal on both ends.
 remote_terminal() {

@@ -42,7 +42,8 @@ folder; two Claudes on one project are two tmux sessions. The folder is
 chosen when a tmux session is started, never in the config.
 
 `scripts/new.command` asks for a tmux name and a folder on the server,
-starts Claude there inside tmux, and attaches. The tmux name becomes the
+relative to the login user's home or absolute, and starts Claude there
+inside tmux, attached. A folder the server does not have is refused. The tmux name becomes the
 file's name, so name a tmux session the way you want to see it in the
 folder.
 

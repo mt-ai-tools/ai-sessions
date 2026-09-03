@@ -97,4 +97,29 @@ case "$out" in *"refresh rate:"*"1s"*) ;; *) fail "listen must show the refresh 
 case "$out" in *SESSION*notes*~/notes*) ;; *) fail "listen must print the table (got '$out')" ;; esac
 ok "listen"
 
+# --- new: the folder is resolved on the server before the session starts,
+# and a folder the server does not have stops it. The fake ssh answers the
+# resolving with a path and records the tmux command it is handed.
+cat >"$tmp/fakebin/ssh" <<'EOR'
+#!/usr/bin/env bash
+cmd="${*: -1}"
+case "$cmd" in
+  *"cd -- "*) [ -f "$FAKE_NO_SUCH_DIR" ] || printf '/home/me/notes\n' ;;
+  *"tmux new-session"*) printf '%s\n' "$cmd" >"$FAKE_TMUX_LOG" ;;
+esac
+EOR
+chmod +x "$tmp/fakebin/ssh"
+export FAKE_TMUX_LOG="$tmp/tmux.log" FAKE_NO_SUCH_DIR="$tmp/no-such-dir"
+printf 'SERVER="dev@fake"\n' >"$tool/config"
+rm -rf "$tool/sessions"
+printf 'notes\n~/notes\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/new.command" >/dev/null 2>&1 || fail "new must start a session in an existing folder"
+grep -q -- "-c /home/me/notes" "$FAKE_TMUX_LOG" || fail "new must hand tmux the resolved folder (got '$(cat "$FAKE_TMUX_LOG")')"
+[ -x "$tool/sessions/notes.command" ] || fail "new must write the session's file"
+touch "$FAKE_NO_SUCH_DIR"; rm -f "$FAKE_TMUX_LOG"; rm -rf "$tool/sessions"
+out="$(printf 'notes\nnope\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/new.command" 2>&1)" && fail "new must refuse a folder the server does not have"
+case "$out" in *"no such folder on the server: nope"*) ;; *) fail "new must say which folder is missing (got '$out')" ;; esac
+[ -e "$FAKE_TMUX_LOG" ] && fail "new must not start a session in a missing folder"
+[ -e "$tool/sessions/notes.command" ] && fail "new must not write a file for a session it did not start"
+ok "new"
+
 echo "all checks passed"
