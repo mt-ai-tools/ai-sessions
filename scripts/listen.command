@@ -16,10 +16,15 @@ export SERVER TMUX_SESSIONS="${TMUX_SESSIONS:-}"
 # to the clear command, whose output differs between terminals.
 wipe() { printf '\033[2J\033[3J\033[H'; }
 
+# Names the window after the server, so a terminal's tab says what it is
+# watching instead of which process it is running.
+printf '\033]0;%s\007' "tmux sessions on $SERVER"
+
 while true; do
   wipe
-  printf '%-40s %s\n' "$SERVER" "$(date '+%H:%M:%S')"
-  echo "every ${REFRESH_SECONDS}s; close this window to stop"
+  echo "tmux sessions on $SERVER"
+  echo "as of $(date '+%H:%M:%S'), asked again every ${REFRESH_SECONDS}s"
+  echo "close this window to stop"
   echo
   bash "$root/helpers/refresh.sh" || true
   sleep "$REFRESH_SECONDS"
