@@ -29,10 +29,20 @@ ok "config"
 
 # --- listing
 out="$(bash -c ". '$root/helpers/listing.sh' && printf '%s\n' 'notes${tab}/home/me/notes${tab}claude${tab}0' | format_listing")"
+case "$out" in SESSION*FOLDER*RUNS*OPENED*) ;; *) fail "table must be headed (got '$out')" ;; esac
 case "$out" in *notes*~/notes*claude*) ;; *) fail "listing row not formatted (got '$out')" ;; esac
 case "$out" in *" -") ;; *) fail "unattached must show as -" ;; esac
 out="$(bash -c ". '$root/helpers/listing.sh' && printf '%s\n' 'notes${tab}/x${tab}claude${tab}1' | format_listing")"
 case "$out" in *yes) ;; *) fail "attached must say yes" ;; esac
+# Deeper folders keep every level below the home.
+out="$(bash -c ". '$root/helpers/listing.sh' && printf '%s\n' 'notes${tab}/home/me/a/b${tab}claude${tab}0' | format_listing")"
+case "$out" in *"~/a/b"*) ;; *) fail "home shortening must keep deeper levels (got '$out')" ;; esac
+# Columns are as wide as their longest cell, heading included, plus the gap:
+# every line puts the folder at the same offset.
+out="$(bash -c ". '$root/helpers/listing.sh' && printf '%s\n' 'a${tab}/x${tab}claude${tab}0' 'a-much-longer-name${tab}/y${tab}sh${tab}1' | format_listing")"
+offsets="$(printf '%s\n' "$out" | awk 'NR == 1 { print index($0, "FOLDER") } NR == 2 { print index($0, "/x") } NR == 3 { print index($0, "/y") }' | sort -u | wc -l | tr -d ' ')"
+[ "$offsets" = "1" ] || fail "columns must line up across heading and rows (got '$out')"
+case "$out" in *"a-much-longer-name   /y"*) ;; *) fail "gap after the longest cell must be exactly three spaces (got '$out')" ;; esac
 out="$(bash -c ". '$root/helpers/listing.sh' && list_panes_command")"
 case "$out" in *"tmux list-panes -a -F"*"|| true") ;; *) fail "server asked in tmux's format, quiet without a server" ;; esac
 out="$(bash -c ". '$root/helpers/listing.sh' && printf '%s\n' 'notes${tab}/a${tab}claude${tab}0' 'recipes${tab}/b${tab}claude${tab}0' | filter_listing 'recipes other'")"

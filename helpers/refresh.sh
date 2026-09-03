@@ -18,7 +18,6 @@ if [ -z "$raw" ]; then
   exit 0
 fi
 
-listing_heading
 printf '%s\n' "$raw" | format_listing
 while IFS= read -r name; do
   [ -n "$name" ] || continue
