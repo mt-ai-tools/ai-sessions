@@ -46,16 +46,17 @@ starts Claude there inside tmux, and attaches. The tmux name becomes the
 file's name, so name a tmux session the way you want to see it in the
 folder.
 
-`scripts/refresh.command` asks the server which tmux sessions it keeps
+`scripts/listen.command` asks the server which tmux sessions it keeps
 running and writes the sessions folder: one file per tmux session, named
-after it. Open a file and a terminal attaches to that tmux session; close
-the window and it keeps running.
+after it. It keeps asking, every minute unless the config says otherwise,
+until you close it. Open a file and a terminal attaches to that tmux
+session; close the window and it keeps running.
 
 Open the files in a terminal.
 
-The sessions folder is a snapshot from the last refresh. A tmux session
-started elsewhere shows up on the next one; a Claude started outside tmux
-never does. On a server shared with others, the config can name the tmux
+The sessions folder is as fresh as the last time listen asked. A tmux
+session started elsewhere shows up on the next round; a Claude started
+outside tmux never does. On a server shared with others, the config can name the tmux
 sessions to show; left empty, every tmux session is shown.
 
 ## Develop

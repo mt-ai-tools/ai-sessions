@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
-# Asks the server which tmux sessions it keeps running and rewrites the
-# sessions folder to match: one runnable file per tmux session. Open this in a terminal first;
-# then open a session's file.
+# One refresh: asks the server which tmux sessions it keeps running and
+# rewrites the sessions folder to match, one runnable file per tmux
+# session. The listen script runs this on a clock; the config is already
+# loaded by whoever runs it.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/.." && pwd)"
-. "$root/helpers/config.sh"
 . "$root/helpers/remote.sh"
 . "$root/helpers/listing.sh"
 . "$root/helpers/sessions-dir.sh"
 
-load_config
 raw="$(remote_run "$(list_panes_command)" | filter_listing "${TMUX_SESSIONS:-}")"
 
 clear_session_files

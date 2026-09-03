@@ -53,13 +53,22 @@ ok "session file"
 mkdir "$tmp/fakebin"
 printf '#!/usr/bin/env bash\nprintf "%%s\\n" %q\n' $'notes\t/home/me/notes\tclaude\t0\nrecipes\t/home/me/recipes\tclaude\t1' >"$tmp/fakebin/ssh"
 chmod +x "$tmp/fakebin/ssh"
-out="$(PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/refresh.command")"
+refresh() { PATH="$tmp/fakebin:$PATH" bash -c ". '$tool/helpers/config.sh' && load_config && export SERVER TMUX_SESSIONS=\${TMUX_SESSIONS:-} && bash '$tool/helpers/refresh.sh'"; }
+out="$(refresh)"
 case "$out" in *notes*recipes*) ;; *) fail "refresh must print the table (got '$out')" ;; esac
 [ -x "$tool/sessions/notes.command" ] && [ -x "$tool/sessions/recipes.command" ] || fail "refresh must write one file per session"
 printf '#!/usr/bin/env bash\nprintf ""\n' >"$tmp/fakebin/ssh"
-out="$(PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/refresh.command")"
+out="$(refresh)"
 case "$out" in *"no tmux sessions running on dev@fake"*) ;; *) fail "no sessions must be said plainly" ;; esac
 [ -e "$tool/sessions/notes.command" ] && fail "refresh must clear files for sessions that are gone"
 ok "refresh"
+
+# --- the clock: the default holds when the config is silent, the config wins
+out="$(bash -c ". '$tool/helpers/config.sh' && load_config && printf '%s' \"\$REFRESH_SECONDS\"")"
+[ "$out" = "60" ] || fail "refresh seconds must default to a minute (got '$out')"
+printf 'SERVER="dev@fake"\nREFRESH_SECONDS=5\n' >"$tool/config"
+out="$(bash -c ". '$tool/helpers/config.sh' && load_config && printf '%s' \"\$REFRESH_SECONDS\"")"
+[ "$out" = "5" ] || fail "config must set the refresh seconds (got '$out')"
+ok "clock"
 
 echo "all checks passed"
