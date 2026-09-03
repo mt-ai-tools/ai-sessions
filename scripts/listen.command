@@ -11,11 +11,6 @@ root="$(cd "$here/.." && pwd)"
 load_config
 export SERVER TMUX_SESSIONS="${TMUX_SESSIONS:-}"
 
-# Wipes the screen and its scrollback, then homes the cursor, so each round
-# replaces the last instead of piling under it. Spelled out rather than left
-# to the clear command, whose output differs between terminals.
-wipe() { printf '\033[2J\033[3J\033[H'; }
-
 # Names the window after the server, so a terminal's tab says what it is
 # watching instead of which process it is running.
 printf '\033]0;%s\007' "tmux sessions on $SERVER"

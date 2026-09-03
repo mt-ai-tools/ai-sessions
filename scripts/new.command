@@ -14,6 +14,7 @@ root="$(cd "$here/.." && pwd)"
 NEW_SESSION_COMMAND='bash -lc claude'
 
 load_config
+wipe
 read -r -p "session name: " name
 read -r -p "folder on the server: " dir
 [ -n "$name" ] && [ -n "$dir" ] || { echo "both are needed" >&2; exit 1; }

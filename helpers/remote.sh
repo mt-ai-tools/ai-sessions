@@ -16,6 +16,12 @@ remote_run() {
   ssh -o LogLevel=ERROR "${SSH_KEEPALIVE[@]}" "$SERVER" "$@"
 }
 
+# Wipes the screen and its scrollback, then homes the cursor. Spelled out
+# rather than left to the clear command, whose output differs between
+# terminals. Used before the first thing a script shows, so whatever the
+# terminal printed while starting it is gone.
+wipe() { printf '\033[2J\033[3J\033[H'; }
+
 # Hands your terminal to a command on the server. For attaching
 # to a session, which needs a terminal on both ends.
 remote_terminal() {
