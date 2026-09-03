@@ -17,12 +17,12 @@ list_panes_command() {
 }
 
 # The table's columns, sized to fit an 80-column window with room to spare:
-# name, folder, what runs there, whether someone is attached.
+# name, folder, what runs there, whether someone has it open.
 LISTING_ROW='%-16s %-36s %-8s %s\n'
 
 # The table's heading, in the same shape as its rows.
 listing_heading() {
-  printf "$LISTING_ROW" "SESSION" "FOLDER" "RUNS" "ATTACHED"
+  printf "$LISTING_ROW" "SESSION" "FOLDER" "RUNS" "OPENED"
 }
 
 # Turns tmux's lines into the table you read: name, folder with the home

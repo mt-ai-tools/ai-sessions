@@ -24,6 +24,3 @@ while IFS= read -r name; do
   [ -n "$name" ] || continue
   write_session_file "$name"
 done < <(printf '%s\n' "$raw" | listing_names)
-echo
-echo "every tmux session above is a file in the sessions folder"
-echo "next to this script; open its file in a terminal to attach"
