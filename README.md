@@ -63,5 +63,5 @@ sessions to show; left empty, every tmux session is shown.
 ## Develop
 
 ```sh
-scripts/test
+scripts/self-check
 ```
