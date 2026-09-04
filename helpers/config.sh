@@ -5,7 +5,7 @@
 CONFIG_FILE="$(dirname "${BASH_SOURCE[0]}")/../config"
 CONFIG_SAMPLE="$(dirname "${BASH_SOURCE[0]}")/../config.sample"
 
-# How often the listen script asks the server again, in seconds, unless the
+# How often the watch script asks the server again, in seconds, unless the
 # config says otherwise. Half a minute is slow enough to cost nothing and
 # fast enough that a session started elsewhere is not long in appearing.
 DEFAULT_REFRESH_SECONDS=30

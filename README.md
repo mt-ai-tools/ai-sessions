@@ -41,13 +41,13 @@ server are several tmux sessions, one per project, each in its own
 folder; two Claudes on one project are two tmux sessions. The folder is
 chosen when a tmux session is started, never in the config.
 
-`scripts/new.command` asks for a tmux name and a folder on the server,
+`scripts/new-session.command` asks for a tmux name and a folder on the server,
 relative to the login user's home or absolute, and starts Claude there
 inside tmux, attached. A folder the server does not have is refused. The tmux name becomes the
 file's name, so name a tmux session the way you want to see it in the
 folder.
 
-`scripts/listen.command` asks the server which tmux sessions it keeps
+`scripts/watch-sessions.command` asks the server which tmux sessions it keeps
 running and writes the sessions folder: one file per tmux session, named
 after it. It keeps asking, every half minute unless the config says otherwise,
 until you stop it. Open a file and a terminal attaches to that tmux
@@ -55,7 +55,7 @@ session; close the window and it keeps running.
 
 Open the files in a terminal.
 
-The sessions folder is as fresh as the last time listen asked. A tmux
+The sessions folder is as fresh as the last time watch asked. A tmux
 session started elsewhere shows up on the next round; a Claude started
 outside tmux never does. On a server shared with others, the config can name the tmux
 sessions to show; left empty, every tmux session is shown.

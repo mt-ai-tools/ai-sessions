@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One refresh: asks the server which tmux sessions it keeps running and
 # rewrites the sessions folder to match, one runnable file per tmux
-# session. The listen script runs this on a clock; the config is already
+# session. The watch script runs this on a clock; the config is already
 # loaded by whoever runs it.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

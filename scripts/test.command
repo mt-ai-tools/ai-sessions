@@ -81,21 +81,21 @@ out="$(bash -c ". '$tool/helpers/config.sh' && load_config && printf '%s' \"\$RE
 [ "$out" = "5" ] || fail "config must set the refresh seconds (got '$out')"
 ok "clock"
 
-# --- listen: one round against the fake server prints the header and the
+# --- watch: one round against the fake server prints the header and the
 # table. Started in the background and stopped after a moment, since it
 # never ends on its own.
 printf '#!/usr/bin/env bash\nprintf "%%s\\n" %q\n' $'notes\t/home/me/notes\tclaude\t0' >"$tmp/fakebin/ssh"
 printf 'SERVER="dev@fake"\nREFRESH_SECONDS=1\n' >"$tool/config"
-PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/listen.command" >"$tmp/listen.out" 2>&1 &
-listen_pid=$!
+PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/watch-sessions.command" >"$tmp/watch.out" 2>&1 &
+watch_pid=$!
 sleep 2
-kill "$listen_pid" 2>/dev/null || true
-wait "$listen_pid" 2>/dev/null || true
-out="$(tr -d '\033' <"$tmp/listen.out")"
-case "$out" in *"tmux sessions on:"*"dev@fake"*) ;; *) fail "listen must print its header (got '$out')" ;; esac
-case "$out" in *"refresh rate:"*"1s"*) ;; *) fail "listen must show the refresh rate" ;; esac
-case "$out" in *SESSION*notes*~/notes*) ;; *) fail "listen must print the table (got '$out')" ;; esac
-ok "listen"
+kill "$watch_pid" 2>/dev/null || true
+wait "$watch_pid" 2>/dev/null || true
+out="$(tr -d '\033' <"$tmp/watch.out")"
+case "$out" in *"tmux sessions on:"*"dev@fake"*) ;; *) fail "watch must print its header (got '$out')" ;; esac
+case "$out" in *"refresh rate:"*"1s"*) ;; *) fail "watch must show the refresh rate" ;; esac
+case "$out" in *SESSION*notes*~/notes*) ;; *) fail "watch must print the table (got '$out')" ;; esac
+ok "watch"
 
 # --- new: the folder is resolved on the server before the session starts,
 # and a folder the server does not have stops it. The fake ssh answers the
@@ -112,11 +112,11 @@ chmod +x "$tmp/fakebin/ssh"
 export FAKE_TMUX_LOG="$tmp/tmux.log" FAKE_NO_SUCH_DIR="$tmp/no-such-dir"
 printf 'SERVER="dev@fake"\n' >"$tool/config"
 rm -rf "$tool/sessions"
-printf 'notes\n~/notes\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/new.command" >/dev/null 2>&1 || fail "new must start a session in an existing folder"
+printf 'notes\n~/notes\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/new-session.command" >/dev/null 2>&1 || fail "new must start a session in an existing folder"
 grep -q -- "-c /home/me/notes" "$FAKE_TMUX_LOG" || fail "new must hand tmux the resolved folder (got '$(cat "$FAKE_TMUX_LOG")')"
 [ -x "$tool/sessions/notes.command" ] || fail "new must write the session's file"
 touch "$FAKE_NO_SUCH_DIR"; rm -f "$FAKE_TMUX_LOG"; rm -rf "$tool/sessions"
-out="$(printf 'notes\nnope\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/new.command" 2>&1)" && fail "new must refuse a folder the server does not have"
+out="$(printf 'notes\nnope\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/new-session.command" 2>&1)" && fail "new must refuse a folder the server does not have"
 case "$out" in *"no such folder on the server: nope"*) ;; *) fail "new must say which folder is missing (got '$out')" ;; esac
 [ -e "$FAKE_TMUX_LOG" ] && fail "new must not start a session in a missing folder"
 [ -e "$tool/sessions/notes.command" ] && fail "new must not write a file for a session it did not start"
