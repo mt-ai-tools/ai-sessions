@@ -54,9 +54,9 @@ ok "listing"
 
 # --- session file
 bash -c ". '$tool/helpers/sessions-dir.sh' && write_session_file notes"
-[ -x "$tool/sessions/notes.command" ] || fail "session file must be written and runnable"
-grep -q "attach.sh" "$tool/sessions/notes.command" || fail "session file must hand over to the attach helper"
-grep -q "notes" "$tool/sessions/notes.command" || fail "session file must carry its name"
+[ -x "$tool/sessions/notes.sh" ] || fail "session file must be written and runnable"
+grep -q "attach.sh" "$tool/sessions/notes.sh" || fail "session file must hand over to the attach helper"
+grep -q "notes" "$tool/sessions/notes.sh" || fail "session file must carry its name"
 ok "session file"
 
 # --- refresh, with a fake ssh answering for the server
@@ -66,11 +66,11 @@ chmod +x "$tmp/fakebin/ssh"
 refresh() { PATH="$tmp/fakebin:$PATH" bash -c ". '$tool/helpers/config.sh' && load_config && export SERVER TMUX_SESSIONS=\${TMUX_SESSIONS:-} && bash '$tool/helpers/refresh.sh'"; }
 out="$(refresh)"
 case "$out" in *notes*recipes*) ;; *) fail "refresh must print the table (got '$out')" ;; esac
-[ -x "$tool/sessions/notes.command" ] && [ -x "$tool/sessions/recipes.command" ] || fail "refresh must write one file per session"
+[ -x "$tool/sessions/notes.sh" ] && [ -x "$tool/sessions/recipes.sh" ] || fail "refresh must write one file per session"
 printf '#!/usr/bin/env bash\nprintf ""\n' >"$tmp/fakebin/ssh"
 out="$(refresh)"
 case "$out" in *"no tmux sessions running on dev@fake"*) ;; *) fail "no sessions must be said plainly" ;; esac
-[ -e "$tool/sessions/notes.command" ] && fail "refresh must clear files for sessions that are gone"
+[ -e "$tool/sessions/notes.sh" ] && fail "refresh must clear files for sessions that are gone"
 ok "refresh"
 
 # --- the clock: the default holds when the config is silent, the config wins
@@ -86,7 +86,7 @@ ok "clock"
 # never ends on its own.
 printf '#!/usr/bin/env bash\nprintf "%%s\\n" %q\n' $'notes\t/home/me/notes\tclaude\t0' >"$tmp/fakebin/ssh"
 printf 'SERVER="dev@fake"\nREFRESH_SECONDS=1\n' >"$tool/config"
-PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/watch-sessions.command" >"$tmp/watch.out" 2>&1 &
+PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/watch-sessions.sh" >"$tmp/watch.out" 2>&1 &
 watch_pid=$!
 sleep 2
 kill "$watch_pid" 2>/dev/null || true
@@ -112,14 +112,14 @@ chmod +x "$tmp/fakebin/ssh"
 export FAKE_TMUX_LOG="$tmp/tmux.log" FAKE_NO_SUCH_DIR="$tmp/no-such-dir"
 printf 'SERVER="dev@fake"\n' >"$tool/config"
 rm -rf "$tool/sessions"
-printf 'notes\n~/notes\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/new-session.command" >/dev/null 2>&1 || fail "new must start a session in an existing folder"
+printf 'notes\n~/notes\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/new-session.sh" >/dev/null 2>&1 || fail "new must start a session in an existing folder"
 grep -q -- "-c /home/me/notes" "$FAKE_TMUX_LOG" || fail "new must hand tmux the resolved folder (got '$(cat "$FAKE_TMUX_LOG")')"
-[ -x "$tool/sessions/notes.command" ] || fail "new must write the session's file"
+[ -x "$tool/sessions/notes.sh" ] || fail "new must write the session's file"
 touch "$FAKE_NO_SUCH_DIR"; rm -f "$FAKE_TMUX_LOG"; rm -rf "$tool/sessions"
-out="$(printf 'notes\nnope\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/new-session.command" 2>&1)" && fail "new must refuse a folder the server does not have"
+out="$(printf 'notes\nnope\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/new-session.sh" 2>&1)" && fail "new must refuse a folder the server does not have"
 case "$out" in *"no such folder on the server: nope"*) ;; *) fail "new must say which folder is missing (got '$out')" ;; esac
 [ -e "$FAKE_TMUX_LOG" ] && fail "new must not start a session in a missing folder"
-[ -e "$tool/sessions/notes.command" ] && fail "new must not write a file for a session it did not start"
+[ -e "$tool/sessions/notes.sh" ] && fail "new must not write a file for a session it did not start"
 ok "new"
 
 echo "all checks passed"

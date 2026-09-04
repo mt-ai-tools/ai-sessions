@@ -4,8 +4,9 @@
 
 SESSIONS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/sessions"
 
-# The suffix that makes a file open in a terminal from a file manager.
-SESSION_FILE_SUFFIX=".command"
+# The suffix a file manager knows as a shell script, so the file can be
+# opened in a terminal from there.
+SESSION_FILE_SUFFIX=".sh"
 
 # Writes the file for one session. Each file only names its session and
 # hands over to the attach helper, so what attaching means has one home
