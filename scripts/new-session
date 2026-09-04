@@ -18,9 +18,11 @@ load_config
 wipe
 read -r -p "session name: " name
 echo
-printf '  %-26s %s\n' "my-folder" "/home/my-user/my-folder" \
-                       "~/my-folder" "/home/my-user/my-folder" \
-                       "/home/my-user/my-folder" "/home/my-user/my-folder"
+echo "Examples:"
+printf '%-24s %s\n' "my-folder" "/home/my-user/my-folder" \
+                     "~/my-folder" "/home/my-user/my-folder" \
+                     "/home/my-user/my-folder" "/home/my-user/my-folder"
+echo
 read -r -p "work path: " dir
 [ -n "$name" ] && [ -n "$dir" ] || { echo "both are needed" >&2; exit 1; }
 
