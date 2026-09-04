@@ -17,7 +17,11 @@ NEW_SESSION_COMMAND='bash -lc claude'
 load_config
 wipe
 read -r -p "session name: " name
-echo "work path on the server, relative to home or absolute"
+echo
+echo "work path on the server, relative to home or absolute:"
+printf '  %-26s %s\n' "my-folder" "/home/my-user/my-folder" \
+                       "~/my-folder" "/home/my-user/my-folder" \
+                       "/home/my-user/my-folder" "/home/my-user/my-folder"
 read -r -p "work path: " dir
 [ -n "$name" ] && [ -n "$dir" ] || { echo "both are needed" >&2; exit 1; }
 
