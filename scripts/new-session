@@ -18,7 +18,6 @@ load_config
 wipe
 read -r -p "session name: " name
 echo
-echo "work path on the server, relative to home or absolute:"
 printf '  %-26s %s\n' "my-folder" "/home/my-user/my-folder" \
                        "~/my-folder" "/home/my-user/my-folder" \
                        "/home/my-user/my-folder" "/home/my-user/my-folder"
