@@ -8,12 +8,21 @@
 # probes and probes tolerated, so about a minute of silence is survived.
 SSH_KEEPALIVE=(-o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 
+# A reach that gets no answer gives up after this many seconds instead of
+# hanging: a laptop just woken has no network for a moment, and a reach
+# made then must end so the next one can be made.
+SSH_CONNECT=(-o ConnectTimeout=10)
+
+# ssh's own exit status when it could not reach the server or lost it on
+# the way. Any other status was handed back by the command run there.
+SSH_LINK_LOST=255
+
 # Runs a command on the server and returns its output. No terminal: for
 # listings and checks. The server's login banner is informational and
 # would land in every listing, so only errors are let through here; the
 # terminal path below keeps the banner, since a person is reading it.
 remote_run() {
-  ssh -o LogLevel=ERROR "${SSH_KEEPALIVE[@]}" "$SERVER" "$@"
+  ssh -o LogLevel=ERROR "${SSH_KEEPALIVE[@]}" "${SSH_CONNECT[@]}" "$SERVER" "$@"
 }
 
 # Wipes the screen and its scrollback, then homes the cursor. Spelled out
@@ -39,5 +48,5 @@ resolve_remote_dir() {
 # Hands your terminal to a command on the server. For attaching
 # to a session, which needs a terminal on both ends.
 remote_terminal() {
-  ssh -t "${SSH_KEEPALIVE[@]}" "$SERVER" "$@"
+  ssh -t "${SSH_KEEPALIVE[@]}" "${SSH_CONNECT[@]}" "$SERVER" "$@"
 }

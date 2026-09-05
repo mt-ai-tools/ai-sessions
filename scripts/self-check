@@ -132,4 +132,26 @@ grep -q -- "tmux attach -t notes" "$FAKE_TMUX_LOG" || fail "attach must name its
 grep -q -- "set-titles-string \"#S\"" "$FAKE_TMUX_LOG" || fail "attach must have tmux title the terminal after the session (got '$(cat "$FAKE_TMUX_LOG")')"
 ok "attach"
 
+# --- reconnect: a link lost mid-session is attached again; a session the
+# server no longer has is not. The fake ssh drops the link on the first
+# attach and answers the second, keeping count in a file; then it says the
+# session is gone, as tmux would, and attach must take that answer.
+cat >"$tmp/fakebin/ssh" <<'EOR'
+#!/usr/bin/env bash
+cmd="${*: -1}"
+printf '%s\n' "$cmd" >>"$FAKE_TMUX_LOG"
+[ -f "$FAKE_SESSION_GONE" ] && { echo "can't find session" >&2; exit 1; }
+[ -f "$FAKE_DROPPED" ] || { touch "$FAKE_DROPPED"; exit 255; }
+EOR
+chmod +x "$tmp/fakebin/ssh"
+export FAKE_DROPPED="$tmp/dropped" FAKE_SESSION_GONE="$tmp/session-gone"
+rm -f "$FAKE_TMUX_LOG"
+out="$(PATH="$tmp/fakebin:$PATH" bash "$tool/sessions/notes" 2>&1)" || fail "attach must ride out a lost link (got '$out')"
+[ "$(grep -c "tmux attach -t notes" "$FAKE_TMUX_LOG")" = "2" ] || fail "attach must attach again after the link is lost (got '$(cat "$FAKE_TMUX_LOG")')"
+case "$out" in *"link to dev@fake lost"*"notes"*) ;; *) fail "a lost link must be said, naming the session (got '$out')" ;; esac
+touch "$FAKE_SESSION_GONE"; rm -f "$FAKE_TMUX_LOG"
+PATH="$tmp/fakebin:$PATH" bash "$tool/sessions/notes" >/dev/null 2>&1 && fail "attach must fail when the server has no such session"
+[ "$(grep -c "tmux attach -t notes" "$FAKE_TMUX_LOG")" = "1" ] || fail "a session the server lacks must not be retried (got '$(cat "$FAKE_TMUX_LOG")')"
+ok "reconnect"
+
 echo "all checks passed"

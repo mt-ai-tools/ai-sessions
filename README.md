@@ -53,6 +53,11 @@ after it. It keeps asking, every half minute unless the config says otherwise,
 until you stop it. Open a file and a terminal attaches to that tmux
 session; close the window and it keeps running.
 
+A closed lid, or any sleep, loses the link to the server but not the
+session. The window says so and attaches again as soon as the server
+answers, so it is back in the session moments after the lid opens, without
+a hand. Only a window closed on purpose, or ctrl-c while it waits, ends it.
+
 Open the files in a terminal. The window's title bar carries the tmux
 name, so two windows into two sessions are told apart at the top; tmux
 sets it on every attach, whether the window came from new-session or from
