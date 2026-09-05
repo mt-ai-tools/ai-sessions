@@ -8,6 +8,7 @@ root="$(cd "$here/.." && pwd)"
 . "$root/helpers/config.sh"
 . "$root/helpers/remote.sh"
 . "$root/helpers/sessions-dir.sh"
+. "$root/helpers/title.sh"
 
 # What a new session runs. A login shell so the server's own PATH — where a
 # per-user tool like claude lives — is the one in effect, and the session
@@ -28,4 +29,4 @@ read -r -p "work path: " dir
 
 dir="$(resolve_remote_dir "$dir")"
 write_session_file "$name"
-remote_terminal "tmux new-session -A -s $(printf %q "$name") -c $(printf %q "$dir") $(printf %q "$NEW_SESSION_COMMAND")"
+remote_terminal "tmux new-session -A -s $(printf %q "$name") -c $(printf %q "$dir") $(printf %q "$NEW_SESSION_COMMAND") $TMUX_TITLE_COMMANDS"

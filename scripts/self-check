@@ -105,7 +105,7 @@ cat >"$tmp/fakebin/ssh" <<'EOR'
 cmd="${*: -1}"
 case "$cmd" in
   *"cd -- "*) [ -f "$FAKE_NO_SUCH_DIR" ] || printf '/home/me/notes\n' ;;
-  *"tmux new-session"*) printf '%s\n' "$cmd" >"$FAKE_TMUX_LOG" ;;
+  *"tmux new-session"*|*"tmux attach"*) printf '%s\n' "$cmd" >"$FAKE_TMUX_LOG" ;;
 esac
 EOR
 chmod +x "$tmp/fakebin/ssh"
@@ -115,11 +115,21 @@ rm -rf "$tool/sessions"
 printf 'notes\n~/notes\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/new-session" >/dev/null 2>&1 || fail "new must start a session in an existing folder"
 grep -q -- "-c /home/me/notes" "$FAKE_TMUX_LOG" || fail "new must hand tmux the resolved folder (got '$(cat "$FAKE_TMUX_LOG")')"
 [ -x "$tool/sessions/notes" ] || fail "new must write the session's file"
+grep -q -- "set-titles-string \"#S\"" "$FAKE_TMUX_LOG" || fail "new must have tmux title the terminal after the session (got '$(cat "$FAKE_TMUX_LOG")')"
 touch "$FAKE_NO_SUCH_DIR"; rm -f "$FAKE_TMUX_LOG"; rm -rf "$tool/sessions"
 out="$(printf 'notes\nnope\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/new-session" 2>&1)" && fail "new must refuse a folder the server does not have"
 case "$out" in *"no such folder on the server: nope"*) ;; *) fail "new must say which folder is missing (got '$out')" ;; esac
 [ -e "$FAKE_TMUX_LOG" ] && fail "new must not start a session in a missing folder"
 [ -e "$tool/sessions/notes" ] && fail "new must not write a file for a session it did not start"
 ok "new"
+
+# --- attach: a session file puts the terminal into its session by name,
+# and has tmux title the terminal after it.
+rm -f "$FAKE_TMUX_LOG"
+bash -c ". '$tool/helpers/sessions-dir.sh' && write_session_file notes"
+PATH="$tmp/fakebin:$PATH" bash "$tool/sessions/notes" >/dev/null 2>&1 || fail "a session file must attach"
+grep -q -- "tmux attach -t notes" "$FAKE_TMUX_LOG" || fail "attach must name its session (got '$(cat "$FAKE_TMUX_LOG")')"
+grep -q -- "set-titles-string \"#S\"" "$FAKE_TMUX_LOG" || fail "attach must have tmux title the terminal after the session (got '$(cat "$FAKE_TMUX_LOG")')"
+ok "attach"
 
 echo "all checks passed"

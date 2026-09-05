@@ -53,7 +53,10 @@ after it. It keeps asking, every half minute unless the config says otherwise,
 until you stop it. Open a file and a terminal attaches to that tmux
 session; close the window and it keeps running.
 
-Open the files in a terminal.
+Open the files in a terminal. The window's title bar carries the tmux
+name, so two windows into two sessions are told apart at the top; tmux
+sets it on every attach, whether the window came from new-session or from
+a file here.
 
 The sessions folder is as fresh as the last time watch asked. A tmux
 session started elsewhere shows up on the next round; a Claude started

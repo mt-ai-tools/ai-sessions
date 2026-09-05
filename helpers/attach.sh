@@ -7,7 +7,8 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/config.sh"
 . "$here/remote.sh"
+. "$here/title.sh"
 
 name="${1:?attach.sh <name>}"
 load_config
-remote_terminal "tmux attach -t $(printf %q "$name")"
+remote_terminal "tmux attach -t $(printf %q "$name") $TMUX_TITLE_COMMANDS"
