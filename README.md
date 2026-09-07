@@ -54,7 +54,11 @@ server's own network the traffic still goes straight across the LAN.
   or one day, months on, it quietly stops answering until someone at it
   logs in again.
 - Your machine: Tailscale installed and logged in to the same account, and
-  running whenever you want the server.
+  running whenever you want the server. Disable key expiry for it too, or
+  every few months ssh stops working until you run `tailscale up` and log
+  in again. Turning expiry off is safe for a machine you keep with you:
+  what it guards against is a lost device that stays logged in, and a
+  lost device is removed in the admin console in seconds, expiry or not.
 - Config: `SERVER="user@myserver"` with the server's Tailscale machine
   name, and `TAILSCALE_NODE="myserver"` beside it, so the tool can ask
   Tailscale about the server when the link fails.
