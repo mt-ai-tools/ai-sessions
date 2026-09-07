@@ -11,6 +11,11 @@ SESSION_FILE_SUFFIX=""
 # Writes the file for one session. Each file only names its session and
 # hands over to the attach helper, so what attaching means has one home
 # and a stale file from an earlier version still does the current thing.
+#
+# The helper runs as the file's child, not in its place. Some terminals
+# (macOS Terminal among them) put the name of the command a tab runs after
+# the title tmux sets, and the tab shows the end when it is short of room:
+# with the file staying the command, that end is the session's own name.
 write_session_file() {
   local name="$1" file="$SESSIONS_DIR/$1$SESSION_FILE_SUFFIX"
   mkdir -p "$SESSIONS_DIR"
@@ -18,7 +23,7 @@ write_session_file() {
 #!/usr/bin/env bash
 # Written by refresh for the session named below; the next refresh rewrites
 # it. Open in a terminal to attach.
-exec "\$(dirname "\${BASH_SOURCE[0]}")/../helpers/attach.sh" $(printf %q "$name")
+"\$(dirname "\${BASH_SOURCE[0]}")/../helpers/attach.sh" $(printf %q "$name")
 EOT
   chmod +x "$file"
 }

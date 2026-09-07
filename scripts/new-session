@@ -8,7 +8,6 @@ root="$(cd "$here/.." && pwd)"
 . "$root/helpers/config.sh"
 . "$root/helpers/remote.sh"
 . "$root/helpers/sessions-dir.sh"
-. "$root/helpers/title.sh"
 
 # What a new session runs. A login shell so the server's own PATH — where a
 # per-user tool like claude lives — is the one in effect, and the session
@@ -28,5 +27,10 @@ read -r -p "work path: " dir
 [ -n "$name" ] && [ -n "$dir" ] || { echo "both are needed" >&2; exit 1; }
 
 dir="$(resolve_remote_dir "$dir")"
+# Started detached, then attached through the session's own file, the same
+# way as from the folder: one path into a session, and the terminal names
+# the tab after the file, that is after the session. -A with -d leaves a
+# session of that name alone if it already runs, so this only ever attaches.
+remote_run "tmux new-session -A -d -s $(printf %q "$name") -c $(printf %q "$dir") $(printf %q "$NEW_SESSION_COMMAND")"
 write_session_file "$name"
-remote_terminal "tmux new-session -A -s $(printf %q "$name") -c $(printf %q "$dir") $(printf %q "$NEW_SESSION_COMMAND") $TMUX_TITLE_COMMANDS"
+exec "$SESSIONS_DIR/$name$SESSION_FILE_SUFFIX"
