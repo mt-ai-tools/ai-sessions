@@ -12,7 +12,8 @@ DEFAULT_REFRESH_SECONDS=30
 
 # Loads the config into the caller's shell. Missing or incomplete, it says
 # where the sample is and fails: a tool that guessed a server would connect
-# somewhere you did not choose.
+# somewhere you did not choose. Keys the config leaves out are empty, so a
+# config written before they existed still loads.
 load_config() {
   if [ ! -f "$CONFIG_FILE" ]; then
     echo "ai-sessions: no config at $CONFIG_FILE — copy $CONFIG_SAMPLE there and fill it in" >&2
@@ -25,4 +26,16 @@ load_config() {
     return 1
   fi
   REFRESH_SECONDS="${REFRESH_SECONDS:-$DEFAULT_REFRESH_SECONDS}"
+  TMUX_SESSIONS="${TMUX_SESSIONS:-}"
+  FORWARD_PORTS="${FORWARD_PORTS:-}"
+  TAILSCALE_NODE="${TAILSCALE_NODE:-}"
+  local port
+  for port in $FORWARD_PORTS; do
+    case "$port" in
+      *[!0-9]*|'') echo "ai-sessions: FORWARD_PORTS in $CONFIG_FILE holds '$port', which is not a port" >&2; return 1 ;;
+    esac
+    if [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+      echo "ai-sessions: FORWARD_PORTS in $CONFIG_FILE holds '$port', which is not a port" >&2; return 1
+    fi
+  done
 }

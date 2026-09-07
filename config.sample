@@ -3,14 +3,27 @@
 # repository's business.
 
 # The server, as ssh itself takes it: user@address, user@hostname, or a
-# Host alias from your own ssh config.
+# Host alias from your own ssh config. A Tailscale name (user@myserver)
+# reaches the server from any network, not only its own.
 SERVER="user@host"
 
 # How often the watch script asks the server again, in seconds. Leave it
-# empty for the default of half a minute.
+# empty for the default, which the watch window shows as its refresh rate.
 REFRESH_SECONDS=""
 
 # Which tmux sessions to show, by their tmux names, separated by spaces.
 # Empty shows every tmux session the server keeps running — on a server
 # shared with others, name yours here and see only those.
 TMUX_SESSIONS=""
+
+# Ports on the server to reach from this machine while a session is
+# attached, separated by spaces. Each appears at the same port on
+# localhost here, so a web app the session runs on the server at :3000
+# opens in your browser at localhost:3000. Empty forwards nothing.
+FORWARD_PORTS=""
+
+# The server's name in Tailscale, when it is reached that way: its
+# machine name, its full ts.net name, or its 100.x address. Lets the tool
+# say why a link is lost, and check the server before a trip. Empty means
+# Tailscale is never asked anything.
+TAILSCALE_NODE=""

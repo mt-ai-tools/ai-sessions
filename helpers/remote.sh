@@ -45,8 +45,25 @@ resolve_remote_dir() {
   printf '%s' "$resolved"
 }
 
+# The ssh flags that bring the config's FORWARD_PORTS to this machine, one
+# -L per port, the same number on both ends. Set into FORWARD_FLAGS, since
+# a function cannot hand back an array; empty when nothing is forwarded.
+FORWARD_FLAGS=()
+set_forward_flags() {
+  local port
+  FORWARD_FLAGS=()
+  for port in ${FORWARD_PORTS:-}; do
+    FORWARD_FLAGS+=(-L "$port:localhost:$port")
+  done
+}
+
 # Hands your terminal to a command on the server. For attaching
-# to a session, which needs a terminal on both ends.
+# to a session, which needs a terminal on both ends. The forwards ride
+# along here and not in remote_run: they belong to a person working in a
+# session, not to a listing. A port already taken on this machine — by an
+# earlier attach, say — is reported by ssh and the session opens without
+# it, since the session matters more than the port.
 remote_terminal() {
-  ssh -t "${SSH_KEEPALIVE[@]}" "${SSH_CONNECT[@]}" "$SERVER" "$@"
+  set_forward_flags
+  ssh -t "${SSH_KEEPALIVE[@]}" "${SSH_CONNECT[@]}" ${FORWARD_FLAGS[@]+"${FORWARD_FLAGS[@]}"} "$SERVER" "$@"
 }

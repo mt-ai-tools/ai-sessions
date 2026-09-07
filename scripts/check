@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Asks, from this machine, whether the server is ready to be worked on:
+# the config loads, ssh gets in, tmux and claude are there, and — when the
+# server is reached through Tailscale — it is online, on a direct path, and
+# its key is not about to run out. One line per question; ends with a
+# failure status if any answer was no. Run it before a trip, or whenever a
+# session file does not attach and you want to know why.
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root="$(cd "$here/.." && pwd)"
+. "$root/helpers/config.sh"
+. "$root/helpers/remote.sh"
+. "$root/helpers/tailscale.sh"
+
+# A key that runs out within this many days is worth a warning: enough
+# time to open the admin console before the server goes quiet.
+EXPIRY_WARNING_DAYS=30
+
+failed=0 tailscale_said=0
+ok() { echo "ok:    $1"; }
+note() { echo "note:  $1"; }
+fail() { echo "FAIL:  $1"; failed=1; }
+
+# --- config
+load_config || exit 1
+ok "config names $SERVER"
+
+# --- tailscale, first: when the link fails, this is what says why
+if [ -n "$TAILSCALE_NODE" ]; then
+  if tailscale_peer; then
+    if [ "$TS_STATE" != "Running" ] || [ "$TS_FOUND" != "yes" ]; then
+      fail "$(tailscale_reason)"; tailscale_said=1
+    else
+      ok "server is in the tailnet as ${TS_DNS_NAME%.}"
+      if [ "$TS_EXPIRED" = "true" ]; then
+        fail "$(tailscale_reason)"; tailscale_said=1
+      elif [ "$TS_ONLINE" = "true" ]; then
+        ok "server is online in the tailnet"
+      else
+        fail "server is offline in the tailnet"; tailscale_said=1
+      fi
+      if days="$(tailscale_expiry_days)"; then
+        if [ "$days" -le "$EXPIRY_WARNING_DAYS" ]; then
+          fail "server's tailscale key runs out in $days days — disable key expiry for it in the admin console"
+        else
+          note "server's tailscale key runs out in $days days; disable key expiry for it in the admin console so it never does"
+        fi
+      else
+        ok "server's tailscale key does not expire"
+      fi
+    fi
+  else
+    fail "config names the server in Tailscale as $TAILSCALE_NODE, but tailscale is not installed on this machine"
+  fi
+fi
+
+# --- ssh
+if remote_run true 2>/dev/null; then
+  ok "ssh reaches $SERVER"
+else
+  fail "ssh does not reach $SERVER"
+  [ "$tailscale_said" -eq 1 ] || { reason="$(tailscale_reason)" && note "$reason"; }
+  echo "no server, nothing more to ask"
+  echo "not ready"
+  exit 1
+fi
+
+# The path is known only once traffic has flowed, so it is read after ssh.
+if [ -n "$TAILSCALE_NODE" ] && tailscale_peer && path="$(tailscale_path)" && [ -n "$path" ]; then
+  case "$path" in
+    direct) ok "tailnet path is direct" ;;
+    *) note "tailnet path is $path — works, with some lag; a firewall between the two is keeping them from a direct path" ;;
+  esac
+fi
+
+# --- what the server has
+if remote_run 'command -v tmux' >/dev/null 2>&1; then
+  ok "tmux is on the server"
+else
+  fail "tmux is not on the server"
+fi
+# A login shell, as a new session uses, so a per-user install is found.
+if remote_run 'bash -lc "command -v claude"' >/dev/null 2>&1; then
+  ok "claude is on the server"
+else
+  fail "claude is not on the server, or not on the login user's PATH"
+fi
+
+# --- forwards: a port already taken here is one the attach cannot bring
+for port in $FORWARD_PORTS; do
+  if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
+    note "port $port is already in use on this machine — an attach here goes on without forwarding it; an earlier attach may hold it"
+  else
+    ok "port $port is free here for forwarding"
+  fi
+done
+
+if [ "$failed" -eq 0 ]; then
+  echo "ready"
+else
+  echo "not ready"
+  exit 1
+fi
