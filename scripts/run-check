@@ -92,15 +92,6 @@ else
   fail "claude is not on the server, or not on the login user's PATH"
 fi
 
-# --- forwards: a port already taken here is one the attach cannot bring
-for port in $FORWARD_PORTS; do
-  if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
-    note "port $port is already in use on this machine — an attach here goes on without forwarding it; an earlier attach may hold it"
-  else
-    ok "port $port is free here for forwarding"
-  fi
-done
-
 if [ "$failed" -eq 0 ]; then
   echo "ready"
 else

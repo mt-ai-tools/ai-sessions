@@ -28,31 +28,47 @@ bash -c ". '$tool/helpers/config.sh' && load_config" 2>/dev/null && fail "config
 printf 'SERVER="dev@fake"\n' >"$tool/config"
 out="$(bash -c ". '$tool/helpers/config.sh' && load_config && printf '%s' \"\$SERVER\"")"
 [ "$out" = "dev@fake" ] || fail "complete config must load SERVER"
-out="$(bash -c ". '$tool/helpers/config.sh' && load_config && printf '%s|%s|%s' \"\$TMUX_SESSIONS\" \"\$FORWARD_PORTS\" \"\$TAILSCALE_NODE\"")"
-[ "$out" = "||" ] || fail "keys the config leaves out must load empty (got '$out')"
-printf 'SERVER="dev@fake"\nFORWARD_PORTS="3000 abc"\n' >"$tool/config"
-bash -c ". '$tool/helpers/config.sh' && load_config" 2>/dev/null && fail "a FORWARD_PORTS entry that is not a port must fail"
-printf 'SERVER="dev@fake"\nFORWARD_PORTS="3000 70000"\n' >"$tool/config"
-bash -c ". '$tool/helpers/config.sh' && load_config" 2>/dev/null && fail "a port above 65535 must fail"
-printf 'SERVER="dev@fake"\n' >"$tool/config"
+out="$(bash -c ". '$tool/helpers/config.sh' && load_config && printf '%s|%s' \"\$TMUX_SESSIONS\" \"\$TAILSCALE_NODE\"")"
+[ "$out" = "|" ] || fail "keys the config leaves out must load empty (got '$out')"
 ok "config"
 
-# --- forwards: the config's ports ride on the terminal path and not on the
-# listing path. The fake ssh records every argument it is given.
-out="$(bash -c ". '$root/helpers/remote.sh' && FORWARD_PORTS='3000 8080' && set_forward_flags && printf '%s ' \"\${FORWARD_FLAGS[@]}\"")"
-[ "$out" = "-L 3000:localhost:3000 -L 8080:localhost:8080 " ] || fail "ports must become one -L each, same number both ends (got '$out')"
-out="$(bash -c ". '$root/helpers/remote.sh' && FORWARD_PORTS='' && set_forward_flags && printf '%s' \"\${#FORWARD_FLAGS[@]}\"")"
-[ "$out" = "0" ] || fail "no ports must mean no flags"
+# --- forward: a port is brought over by a link of its own, said to be in
+# place once the server's word arrives, and held; the session path carries
+# none. The fake ssh records every argument and answers as the server
+# would, dropping the link first when told to.
 mkdir -p "$tmp/argbin"
-printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$@" >"$FAKE_ARGS"\n' >"$tmp/argbin/ssh"
+cat >"$tmp/argbin/ssh" <<'EOR'
+#!/usr/bin/env bash
+printf '%s\n' "$@" >"$FAKE_ARGS"
+if [ -f "$FAKE_DROPS_LEFT" ]; then
+  n="$(cat "$FAKE_DROPS_LEFT")"
+  [ "$n" -gt 0 ] && { printf '%s' "$((n - 1))" >"$FAKE_DROPS_LEFT"; exit 255; }
+fi
+case "${*: -1}" in *"echo up"*) echo up ;; esac
+exit 0
+EOR
 chmod +x "$tmp/argbin/ssh"
-export FAKE_ARGS="$tmp/ssh.args"
-PATH="$tmp/argbin:$PATH" bash -c ". '$root/helpers/remote.sh' && SERVER=dev@fake FORWARD_PORTS='3000' && remote_terminal true"
-grep -qx -- "3000:localhost:3000" "$FAKE_ARGS" || fail "attaching must carry the forward (got '$(tr '\n' ' ' <"$FAKE_ARGS")')"
-PATH="$tmp/argbin:$PATH" bash -c ". '$root/helpers/remote.sh' && SERVER=dev@fake FORWARD_PORTS='3000' && remote_run true"
-grep -q -- "localhost:3000" "$FAKE_ARGS" && fail "a listing must not carry forwards"
-PATH="$tmp/argbin:$PATH" bash -c "set -u; . '$root/helpers/remote.sh' && SERVER=dev@fake FORWARD_PORTS='' && remote_terminal true" || fail "no forwards must still attach under set -u"
-ok "forwards"
+export FAKE_ARGS="$tmp/ssh.args" FAKE_DROPS_LEFT="$tmp/drops-left"
+rm -f "$FAKE_DROPS_LEFT"
+out="$(bash -c ". '$root/helpers/remote.sh' && for p in 1 65535 3000; do is_port \$p || echo \"no \$p\"; done; for p in 0 65536 abc '' 30a; do is_port \"\$p\" && echo \"yes \$p\"; done; true")"
+[ -z "$out" ] || fail "a port is a number from 1 to 65535 and nothing else (got '$out')"
+out="$(PATH="$tmp/argbin:$PATH" bash "$tool/scripts/forward-port" 3000 2>&1)" || fail "a forward whose link ends cleanly must end cleanly (got '$out')"
+case "$out" in *"port 3000 on the server is localhost:3000 here"*) ;; *) fail "the port must be said to be in place once the server answers (got '$out')" ;; esac
+grep -qx -- "3000:localhost:3000" "$FAKE_ARGS" || fail "the forward must be the same port both ends (got '$(tr '\n' ' ' <"$FAKE_ARGS")')"
+grep -qx -- "ExitOnForwardFailure=yes" "$FAKE_ARGS" || fail "a forward that cannot be set up must end the link (got '$(tr '\n' ' ' <"$FAKE_ARGS")')"
+grep -q -- "-t" "$FAKE_ARGS" && fail "a forward needs no terminal"
+out="$(printf '8080\n' | PATH="$tmp/argbin:$PATH" bash "$tool/scripts/forward-port" 2>&1)" || fail "the port must be asked for when not given (got '$out')"
+case "$out" in *"localhost:8080 here"*) ;; *) fail "the port asked for must be the one forwarded (got '$out')" ;; esac
+out="$(PATH="$tmp/argbin:$PATH" bash "$tool/scripts/forward-port" 70000 2>&1)" && fail "a number that is not a port must be refused"
+case "$out" in *"'70000' is not a port"*) ;; *) fail "a refused port must be named (got '$out')" ;; esac
+printf '2' >"$FAKE_DROPS_LEFT"
+out="$(PATH="$tmp/argbin:$PATH" bash "$tool/scripts/forward-port" 3000 2>&1)" || fail "a forward must ride out a lost link (got '$out')"
+case "$out" in *"link to dev@fake lost, port 3000 comes back with it"*"reconnecting in 3s"*"reconnecting in 6s"*"localhost:3000 here"*) ;; *) fail "a lost link must be said, waited out with a growing wait, and the port brought back (got '$out')" ;; esac
+PATH="$tmp/argbin:$PATH" bash -c ". '$root/helpers/remote.sh' && SERVER=dev@fake && remote_terminal true"
+grep -q -- "localhost:" "$FAKE_ARGS" && fail "the session path must carry no forward (got '$(tr '\n' ' ' <"$FAKE_ARGS")')"
+PATH="$tmp/argbin:$PATH" bash -c ". '$root/helpers/remote.sh' && SERVER=dev@fake && remote_run true"
+grep -q -- "localhost:" "$FAKE_ARGS" && fail "a listing must carry no forward"
+ok "forward"
 
 # --- listing
 out="$(bash -c ". '$root/helpers/listing.sh' && printf '%s\n' 'notes${tab}/home/me/notes${tab}claude${tab}0' | format_listing")"
@@ -302,7 +318,7 @@ case "$out" in *tailnet*) fail "without TAILSCALE_NODE watch must say nothing ab
 case "$out" in *"Operation timed out"*) ;; *) fail "ssh's own error must stay (got '$out')" ;; esac
 ok "watch"
 
-# --- new: the folder is resolved on the server before the session starts,
+# --- add: the folder is resolved on the server before the session starts,
 # and a folder the server does not have stops it. The fake ssh answers the
 # resolving with a path and records every tmux command it is handed.
 cat >"$tmp/fakebin/ssh" <<'EOR'
@@ -317,17 +333,17 @@ chmod +x "$tmp/fakebin/ssh"
 export FAKE_TMUX_LOG="$tmp/tmux.log" FAKE_NO_SUCH_DIR="$tmp/no-such-dir"
 printf 'SERVER="dev@fake"\n' >"$tool/config"
 rm -rf "$tool/sessions"; rm -f "$FAKE_TMUX_LOG"
-printf 'notes\n~/notes\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/new-session" >/dev/null 2>&1 || fail "new must start a session in an existing folder"
-grep -q -- "tmux new-session -A -d -s notes -c /home/me/notes" "$FAKE_TMUX_LOG" || fail "new must start the session detached in the resolved folder (got '$(cat "$FAKE_TMUX_LOG")')"
-[ -x "$tool/sessions/notes" ] || fail "new must write the session's file"
-grep -q -- "tmux attach -t notes" "$FAKE_TMUX_LOG" || fail "new must attach through the session's file (got '$(cat "$FAKE_TMUX_LOG")')"
-grep -q -- "set-titles-string \"#S\"" "$FAKE_TMUX_LOG" || fail "new must have tmux title the terminal after the session (got '$(cat "$FAKE_TMUX_LOG")')"
+printf 'notes\n~/notes\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/add-session" >/dev/null 2>&1 || fail "add must start a session in an existing folder"
+grep -q -- "tmux new-session -A -d -s notes -c /home/me/notes" "$FAKE_TMUX_LOG" || fail "add must start the session detached in the resolved folder (got '$(cat "$FAKE_TMUX_LOG")')"
+[ -x "$tool/sessions/notes" ] || fail "add must write the session's file"
+grep -q -- "tmux attach -t notes" "$FAKE_TMUX_LOG" || fail "add must attach through the session's file (got '$(cat "$FAKE_TMUX_LOG")')"
+grep -q -- "set-titles-string \"#S\"" "$FAKE_TMUX_LOG" || fail "add must have tmux title the terminal after the session (got '$(cat "$FAKE_TMUX_LOG")')"
 touch "$FAKE_NO_SUCH_DIR"; rm -f "$FAKE_TMUX_LOG"; rm -rf "$tool/sessions"
-out="$(printf 'notes\nnope\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/new-session" 2>&1)" && fail "new must refuse a folder the server does not have"
-case "$out" in *"no such folder on the server: nope"*) ;; *) fail "new must say which folder is missing (got '$out')" ;; esac
-[ -e "$FAKE_TMUX_LOG" ] && fail "new must not start a session in a missing folder"
-[ -e "$tool/sessions/notes" ] && fail "new must not write a file for a session it did not start"
-ok "new"
+out="$(printf 'notes\nnope\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/add-session" 2>&1)" && fail "add must refuse a folder the server does not have"
+case "$out" in *"no such folder on the server: nope"*) ;; *) fail "add must say which folder is missing (got '$out')" ;; esac
+[ -e "$FAKE_TMUX_LOG" ] && fail "add must not start a session in a missing folder"
+[ -e "$tool/sessions/notes" ] && fail "add must not write a file for a session it did not start"
+ok "add"
 
 # --- attach: a session file puts the terminal into its session by name,
 # and has tmux title the terminal after it. The helper runs as the file's
@@ -413,7 +429,7 @@ else
   ok "reconnect terminal (skipped: no BSD script to make a terminal)"
 fi
 
-# --- check: every question answered against the fakes, ready or not.
+# --- run-check: every question answered against the fakes, ready or not.
 cat >"$tmp/fakebin/ssh" <<'EOR'
 #!/usr/bin/env bash
 [ -f "$FAKE_SSH_DOWN" ] && exit 255
@@ -424,25 +440,25 @@ EOR
 chmod +x "$tmp/fakebin/ssh"
 export FAKE_SSH_DOWN="$tmp/ssh-down" FAKE_NO_TMUX="$tmp/no-tmux"
 rm -f "$FAKE_SSH_DOWN" "$FAKE_NO_TMUX"
-printf 'SERVER="dev@fake"\nFORWARD_PORTS="65001"\nTAILSCALE_NODE="myserver"\n' >"$tool/config"
-out="$(PATH="$tmp/fakebin:$tmp/tsbin:$PATH" bash "$tool/scripts/check" 2>&1)" || fail "a ready server must pass the check (got '$out')"
-case "$out" in *"in the tailnet as myserver.tail1234.ts.net"*"online in the tailnet"*"routes to the server over utun9"*"does not expire"*"ssh reaches dev@fake"*"path is direct"*"tmux is on the server"*"claude is on the server"*"65001 is free"*ready) ;; *) fail "check must answer every question in order (got '$out')" ;; esac
+printf 'SERVER="dev@fake"\nTAILSCALE_NODE="myserver"\n' >"$tool/config"
+out="$(PATH="$tmp/fakebin:$tmp/tsbin:$PATH" bash "$tool/scripts/run-check" 2>&1)" || fail "a ready server must pass the check (got '$out')"
+case "$out" in *"in the tailnet as myserver.tail1234.ts.net"*"online in the tailnet"*"routes to the server over utun9"*"does not expire"*"ssh reaches dev@fake"*"path is direct"*"tmux is on the server"*"claude is on the server"*ready) ;; *) fail "check must answer every question in order (got '$out')" ;; esac
 touch "$FAKE_TS_NO_ROUTE" "$FAKE_SSH_DOWN"
-out="$(PATH="$tmp/fakebin:$tmp/tsbin:$PATH" bash "$tool/scripts/check" 2>&1)" && fail "a server not routed to must fail the check"
+out="$(PATH="$tmp/fakebin:$tmp/tsbin:$PATH" bash "$tool/scripts/run-check" 2>&1)" && fail "a server not routed to must fail the check"
 case "$out" in *"ok:    server is online"*"FAIL:  the server is online, but this machine has no route"*"FAIL:  ssh does not reach"*"not ready") ;; *) fail "a missing route must be said among the answers (got '$out')" ;; esac
 [ "$(printf '%s\n' "$out" | grep -c "no route into the tailnet")" = "1" ] || fail "a missing route already said must not be repeated (got '$out')"
 rm -f "$FAKE_TS_NO_ROUTE" "$FAKE_SSH_DOWN"
 printf 'SERVER="dev@fake"\nTAILSCALE_NODE="sleeper"\n' >"$tool/config"
 touch "$FAKE_SSH_DOWN"
-out="$(PATH="$tmp/fakebin:$tmp/tsbin:$PATH" bash "$tool/scripts/check" 2>&1)" && fail "an unreachable server must fail the check"
+out="$(PATH="$tmp/fakebin:$tmp/tsbin:$PATH" bash "$tool/scripts/run-check" 2>&1)" && fail "an unreachable server must fail the check"
 case "$out" in *"FAIL:  server is offline"*"FAIL:  ssh does not reach"*"not ready") ;; *) fail "check must say what failed (got '$out')" ;; esac
 [ "$(printf '%s\n' "$out" | grep -c "offline in the tailnet")" = "1" ] || fail "a reason already given must not be repeated (got '$out')"
 rm -f "$FAKE_SSH_DOWN"; touch "$FAKE_NO_TMUX"
 printf 'SERVER="dev@fake"\n' >"$tool/config"
-out="$(PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/check" 2>&1)" && fail "a server without tmux must fail the check"
+out="$(PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/run-check" 2>&1)" && fail "a server without tmux must fail the check"
 case "$out" in *tailnet*) fail "without TAILSCALE_NODE the check must not mention tailscale (got '$out')" ;; esac
 case "$out" in *"FAIL:  tmux is not on the server"*) ;; *) fail "missing tmux must be said (got '$out')" ;; esac
 rm -f "$FAKE_NO_TMUX"
-ok "check"
+ok "run-check"
 
 echo "all checks passed"

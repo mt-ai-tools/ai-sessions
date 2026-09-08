@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Brings one port of the server's to this machine for as long as this
+# window is open: a web app a session runs on the server at 3000 opens in
+# your browser at localhost:3000, from any network. Asks which port, or
+# takes it as the argument. Close the window and the port is gone; two
+# ports are two windows. The link carries the port and nothing else — no
+# session rides on it, and no session's window carries a port — so what
+# is forwarded is exactly the windows that are open, and closing one
+# touches nothing else. A lost link is mended the way a session's is.
+#
+# Usage: forward-port [port]
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root="$(cd "$here/.." && pwd)"
+. "$root/helpers/config.sh"
+. "$root/helpers/remote.sh"
+. "$root/helpers/reconnect.sh"
+
+load_config
+port="${1:-}"
+if [ -z "$port" ]; then
+  wipe
+  read -r -p "port on the server: " port
+fi
+is_port "$port" || { echo "ai-sessions: '$port' is not a port" >&2; exit 1; }
+
+# Names the window after the port, so a terminal's tab says what it holds.
+printf '\033]0;%s\007' "port $port on $SERVER"
+
+while true; do
+  # Checked before each reach, not once: the port is this window's while
+  # the link holds and free again when it is lost, so only another holder
+  # of it is in the way — an earlier window for the same port, or
+  # something of this machine's own.
+  if port_in_use "$port"; then
+    echo "ai-sessions: port $port is already in use on this machine — another forward-port window, or something running here" >&2
+    exit 1
+  fi
+  status=0
+  SECONDS=0
+  remote_forward "$port" || status=$?
+  [ "$status" -eq "$SSH_LINK_LOST" ] || exit "$status"
+  reconnect_wait "$SECONDS" "port $port comes back with it"
+done

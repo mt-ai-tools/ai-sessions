@@ -70,8 +70,7 @@ changes, the session files and everything else stay.
 
 - A clone of this repository.
 - `config.sample` copied to `config` beside it, with the server filled in
-  as above. `config` is ignored by version control. Ports the server
-  serves on that you want in your browser go in `FORWARD_PORTS`.
+  as above. `config` is ignored by version control.
 - Nothing to install beyond bash and ssh — and Tailscale, for the second
   way.
 
@@ -83,7 +82,7 @@ server are several tmux sessions, one per project, each in its own
 folder; two Claudes on one project are two tmux sessions. The folder is
 chosen when a tmux session is started, never in the config.
 
-`scripts/new-session` asks for a tmux name and a folder on the server,
+`scripts/add-session` asks for a tmux name and a folder on the server,
 relative to the login user's home or absolute, and starts Claude there
 inside tmux, attached. A folder the server does not have is refused.
 The tmux name becomes the file's name, so name a tmux session the way you
@@ -108,16 +107,17 @@ as happens when a network service is restarted by hand or another VPN
 takes the route; restarting Tailscale on this machine puts it back.
 The watch window says the same under ssh's error when its round fails.
 
-With `FORWARD_PORTS` in the config, each port named there is, while a
-session is attached, the same port on localhost here: a web app the
-session runs on the server at 3000 opens in your browser at
-localhost:3000, from any network. A port already taken on your machine,
-by an earlier attach say, is reported by ssh and the session opens
-without it.
+`scripts/forward-port` asks for a port and brings it here for as long as
+its window is open: a web app a session runs on the server at 3000 opens
+in your browser at localhost:3000, from any network. Close the window and
+the port is gone; two ports are two windows. Ports and sessions never
+share a window, so what is forwarded is exactly the port windows you see,
+and closing a session touches no port. A lost link is mended the way a
+session's is, and the port comes back with it.
 
 Open the files in a terminal. The window's title bar carries the tmux
 name, so two windows into two sessions are told apart at the top; tmux
-sets it on every attach, whether the window came from new-session or from
+sets it on every attach, whether the window came from add-session or from
 a file here. A terminal that adds the name of the command a tab runs
 (macOS Terminal does) adds the file's name, which is the tmux name again,
 so a tab too narrow for the whole title still ends in the session's name.
@@ -130,7 +130,7 @@ the tmux sessions to show; left empty, every tmux session is shown.
 ## Before a trip
 
 ```sh
-scripts/check
+scripts/run-check
 ```
 
 asks, from your machine, whether the server is ready: the config loads,
