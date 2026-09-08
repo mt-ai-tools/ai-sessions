@@ -101,8 +101,12 @@ answers, so it is back in the session moments after the lid opens, without
 a hand. Only a window closed on purpose, or ctrl-c while it waits, ends it.
 A link that stays lost is tried less and less often, and when the config
 names the server in Tailscale, each try says what Tailscale knows:
-Tailscale is off on this machine, the server is offline, or its key has run
-out.
+Tailscale is off on this machine, the server is offline, its key has run
+out, or this machine has lost its route into the tailnet — Tailscale up on
+both ends, but packets for the server leaving by the ordinary interface,
+as happens when a network service is restarted by hand or another VPN
+takes the route; restarting Tailscale on this machine puts it back.
+The watch window says the same under ssh's error when its round fails.
 
 With `FORWARD_PORTS` in the config, each port named there is, while a
 session is attached, the same port on localhost here: a web app the
@@ -131,10 +135,10 @@ scripts/check
 
 asks, from your machine, whether the server is ready: the config loads,
 ssh gets in, tmux and Claude are there, and — through Tailscale — the
-server is online, on a direct path rather than a relayed one, and its key
-is not about to run out. One line per question. Run it before leaving the
-server's network, or whenever a session file will not attach and you want
-to know why.
+server is online, this machine has a route to it, the path is direct
+rather than relayed, and its key is not about to run out. One line per
+question. Run it before leaving the server's network, or whenever a
+session file will not attach and you want to know why.
 
 ## Develop
 

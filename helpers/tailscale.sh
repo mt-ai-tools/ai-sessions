@@ -66,9 +66,10 @@ tailscale_status_json() {
 #   TS_CUR_ADDR    the address packets take when direct, empty when relayed
 #   TS_RELAY       the relay in use
 #   TS_DNS_NAME    the server's full name in the tailnet
+#   TS_ADDR        the server's 100.x address in the tailnet
 tailscale_peer() {
   local json
-  TS_STATE="" TS_FOUND="" TS_ONLINE="" TS_EXPIRED="" TS_KEY_EXPIRY="" TS_CUR_ADDR="" TS_RELAY="" TS_DNS_NAME=""
+  TS_STATE="" TS_FOUND="" TS_ONLINE="" TS_EXPIRED="" TS_KEY_EXPIRY="" TS_CUR_ADDR="" TS_RELAY="" TS_DNS_NAME="" TS_ADDR=""
   [ -n "${TAILSCALE_NODE:-}" ] || return 1
   tailscale_command >/dev/null || return 1
   json="$(tailscale_status_json)" || return 0
@@ -83,10 +84,12 @@ tailscale_peer() {
       if (index(" " ips " ", " " node " ")) return 1
       return 0
     }
-    function emit() {
+    function emit(   n, i, parts, addr) {
+      n = split(ips, parts, " "); addr = ""
+      for (i = 1; i <= n; i++) if (index(parts[i], ".")) { addr = parts[i]; break }
       print "TS_FOUND=yes"
       print "TS_ONLINE=" q(online); print "TS_EXPIRED=" q(expired); print "TS_KEY_EXPIRY=" q(keyexpiry)
-      print "TS_CUR_ADDR=" q(curaddr); print "TS_RELAY=" q(relay); print "TS_DNS_NAME=" q(dnsname)
+      print "TS_CUR_ADDR=" q(curaddr); print "TS_RELAY=" q(relay); print "TS_DNS_NAME=" q(dnsname); print "TS_ADDR=" q(addr)
     }
     BEGIN { depth = 0; peer_depth = -1; entry_depth = -1; ips_depth = -1; found = 0 }
     {
@@ -117,6 +120,44 @@ tailscale_peer() {
   return 0
 }
 
+# The interface this machine's kernel would send a packet for the server
+# out of, or nothing when it cannot be asked. Tailscale online on both
+# ends is not the whole way: the kernel must also know to hand packets for
+# the tailnet's addresses to Tailscale's interface, and that knowledge is
+# a route Tailscale installs when it starts. A network service restarted
+# by hand (configd on macOS, say), or another VPN taking the route, leaves
+# Tailscale answering that all is well while every packet for the server
+# goes out the ordinary way and is dropped. The question is asked as each
+# system answers it: route on macOS, ip on Linux. Expects tailscale_peer to
+# have run.
+tailscale_route_interface() {
+  [ -n "${TS_ADDR:-}" ] || return 1
+  local iface=""
+  if command -v route >/dev/null 2>&1; then
+    iface="$(route -n get "$TS_ADDR" 2>/dev/null | awk '/interface:/ { print $2; exit }')"
+  fi
+  if [ -z "$iface" ] && command -v ip >/dev/null 2>&1; then
+    iface="$(ip route get "$TS_ADDR" 2>/dev/null | awk '{ for (i = 1; i < NF; i++) if ($i == "dev") { print $(i + 1); exit } }')"
+  fi
+  [ -n "$iface" ] || return 1
+  printf '%s' "$iface"
+}
+
+# True when this machine has no route into the tailnet: the kernel would
+# send packets for the server somewhere other than Tailscale's interface,
+# utun on macOS and tailscale0 on Linux. False when it has one, and false
+# too when the question cannot be asked, since a route that cannot be
+# checked is not a route known to be missing. Sets TS_ROUTE_IFACE to the
+# interface found. Expects tailscale_peer to have run.
+TS_ROUTE_IFACE=""
+tailscale_route_missing() {
+  TS_ROUTE_IFACE="$(tailscale_route_interface)" || return 1
+  case "$TS_ROUTE_IFACE" in
+    utun*|tailscale*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
 # Why the server is out of reach, in one sentence, as far as Tailscale can
 # tell. Nothing, and 1, when Tailscale is not part of how the server is
 # reached. Reads the status itself, so a caller need not.
@@ -132,6 +173,8 @@ tailscale_reason() {
     echo "the server's tailscale key has expired — log in to tailscale again on the server, and disable key expiry for it in the admin console"
   elif [ "$TS_ONLINE" != "true" ]; then
     echo "the server is offline in the tailnet"
+  elif tailscale_route_missing; then
+    echo "the server is online, but this machine has no route into the tailnet (packets for it leave by $TS_ROUTE_IFACE) — restart tailscaled on this machine"
   else
     echo "the server is reachable in the tailnet, ssh itself is not answering"
   fi

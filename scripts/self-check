@@ -176,7 +176,27 @@ cat <<EOJ
 EOJ
 EOR
 chmod +x "$tmp/tsbin/tailscale"
+# The kernel's answer to where a packet for the server goes, faked for both
+# systems: route as macOS has it, ip as Linux has it. Each names Tailscale's
+# interface unless told the route is gone; route steps aside when told the
+# machine is Linux, so ip's reading is tried too. The real route would
+# otherwise answer for the fake server's address from this machine's table.
+cat >"$tmp/tsbin/route" <<'EOR'
+#!/usr/bin/env bash
+[ -f "$FAKE_TS_LINUX" ] && { echo "route: unknown option" >&2; exit 1; }
+[ "$1 $2" = "-n get" ] || exit 1
+iface=utun9; [ -f "$FAKE_TS_NO_ROUTE" ] && iface=en0
+printf '   route to: %s\ndestination: %s\n  interface: %s\n' "$3" "$3" "$iface"
+EOR
+cat >"$tmp/tsbin/ip" <<'EOR'
+#!/usr/bin/env bash
+[ "$1 $2" = "route get" ] || exit 1
+iface=tailscale0; [ -f "$FAKE_TS_NO_ROUTE" ] && iface=eth0
+printf '%s dev %s table 52 src 100.64.0.1 uid 1000\n' "$3" "$iface"
+EOR
+chmod +x "$tmp/tsbin/route" "$tmp/tsbin/ip"
 export FAKE_TS_HANG="$tmp/ts-hang" FAKE_TS_STOPPED="$tmp/ts-stopped" FAKE_TS_FAILS="$tmp/ts-fails" FAKE_TS_LOGGED_OUT="$tmp/ts-logged-out"
+export FAKE_TS_NO_ROUTE="$tmp/ts-no-route" FAKE_TS_LINUX="$tmp/ts-linux"
 # Run as attach and check run it, under set -e, with temp files kept where
 # they can be counted afterwards.
 mkdir -p "$tmp/tsTMP"
@@ -199,6 +219,25 @@ out="$(ts other 'tailscale_reason')"
 case "$out" in *"key has expired"*) ;; *) fail "an expired key must be said before offline (got '$out')" ;; esac
 out="$(ts nope 'tailscale_reason')"
 case "$out" in *"not in this tailnet as nope"*) ;; *) fail "a name the tailnet lacks must be said (got '$out')" ;; esac
+out="$(ts myserver 'tailscale_peer && printf "%s %s" "$TS_ADDR" "$(tailscale_route_interface)"')"
+[ "$out" = "100.64.0.2 utun9" ] || fail "the server's 100.x address must be read and the kernel asked where it goes (got '$out')"
+touch "$FAKE_TS_NO_ROUTE"
+out="$(ts myserver 'tailscale_reason')"
+case "$out" in *"no route into the tailnet"*"leave by en0"*"restart tailscaled"*) ;; *) fail "a server online but not routed to must be said, with where the packets go (got '$out')" ;; esac
+touch "$FAKE_TS_LINUX"
+out="$(ts myserver 'tailscale_reason')"
+case "$out" in *"no route into the tailnet"*"leave by eth0"*) ;; *) fail "the route must be read the Linux way when route is not there (got '$out')" ;; esac
+rm -f "$FAKE_TS_NO_ROUTE"
+out="$(ts myserver 'tailscale_reason')"
+case "$out" in *"reachable in the tailnet"*) ;; *) fail "a route over tailscale0 must count as a route (got '$out')" ;; esac
+rm -f "$FAKE_TS_LINUX"
+# Only the fake tailscale on the PATH, neither route nor ip: the question
+# cannot be asked, and a route that cannot be checked is not one missing.
+mkdir -p "$tmp/tsonly"; cp "$tmp/tsbin/tailscale" "$tmp/tsonly/"
+touch "$FAKE_TS_NO_ROUTE"
+out="$(TMPDIR="$tmp/tsTMP" PATH="$tmp/tsonly:/usr/bin:/bin" TAILSCALE_NODE=myserver bash -c "set -euo pipefail; . '$root/helpers/tailscale.sh' && tailscale_reason")"
+case "$out" in *"reachable in the tailnet"*) ;; *) fail "a route that cannot be asked about must not be called missing (got '$out')" ;; esac
+rm -f "$FAKE_TS_NO_ROUTE"
 touch "$FAKE_TS_STOPPED"
 out="$(ts myserver 'tailscale_reason')"
 case "$out" in *"not running on this machine"*"Stopped"*) ;; *) fail "a stopped tailscale must be said with its state (got '$out')" ;; esac
@@ -240,6 +279,27 @@ out="$(tr -d '\033' <"$tmp/watch.out")"
 case "$out" in *"tmux sessions on:"*"dev@fake"*) ;; *) fail "watch must print its header (got '$out')" ;; esac
 case "$out" in *"refresh rate:"*"1s"*) ;; *) fail "watch must show the refresh rate" ;; esac
 case "$out" in *SESSION*notes*~/notes*) ;; *) fail "watch must print the table (got '$out')" ;; esac
+# The link lost: the folder is left as it was, and when the config names
+# the server in Tailscale, why is said under ssh's own error.
+printf '#!/usr/bin/env bash\necho "ssh: connect to host fake port 22: Operation timed out" >&2; exit 255\n' >"$tmp/fakebin/ssh"
+printf 'SERVER="dev@fake"\nREFRESH_SECONDS=1\nTAILSCALE_NODE="sleeper"\n' >"$tool/config"
+PATH="$tmp/fakebin:$tmp/tsbin:$PATH" bash "$tool/scripts/watch-sessions" >"$tmp/watch.out" 2>&1 &
+watch_pid=$!
+sleep 2
+kill "$watch_pid" 2>/dev/null || true
+wait "$watch_pid" 2>/dev/null || true
+out="$(tr -d '\033' <"$tmp/watch.out")"
+case "$out" in *"Operation timed out"*"ai-sessions: the server is offline in the tailnet"*) ;; *) fail "a lost link must say what tailscale knows under ssh's error (got '$out')" ;; esac
+[ -x "$tool/sessions/notes" ] || fail "a lost link must leave the sessions folder as it was"
+printf 'SERVER="dev@fake"\nREFRESH_SECONDS=1\n' >"$tool/config"
+PATH="$tmp/fakebin:$tmp/tsbin:$PATH" bash "$tool/scripts/watch-sessions" >"$tmp/watch.out" 2>&1 &
+watch_pid=$!
+sleep 2
+kill "$watch_pid" 2>/dev/null || true
+wait "$watch_pid" 2>/dev/null || true
+out="$(tr -d '\033' <"$tmp/watch.out")"
+case "$out" in *tailnet*) fail "without TAILSCALE_NODE watch must say nothing about tailscale (got '$out')" ;; esac
+case "$out" in *"Operation timed out"*) ;; *) fail "ssh's own error must stay (got '$out')" ;; esac
 ok "watch"
 
 # --- new: the folder is resolved on the server before the session starts,
@@ -366,7 +426,12 @@ export FAKE_SSH_DOWN="$tmp/ssh-down" FAKE_NO_TMUX="$tmp/no-tmux"
 rm -f "$FAKE_SSH_DOWN" "$FAKE_NO_TMUX"
 printf 'SERVER="dev@fake"\nFORWARD_PORTS="65001"\nTAILSCALE_NODE="myserver"\n' >"$tool/config"
 out="$(PATH="$tmp/fakebin:$tmp/tsbin:$PATH" bash "$tool/scripts/check" 2>&1)" || fail "a ready server must pass the check (got '$out')"
-case "$out" in *"in the tailnet as myserver.tail1234.ts.net"*"online in the tailnet"*"does not expire"*"ssh reaches dev@fake"*"path is direct"*"tmux is on the server"*"claude is on the server"*"65001 is free"*ready) ;; *) fail "check must answer every question in order (got '$out')" ;; esac
+case "$out" in *"in the tailnet as myserver.tail1234.ts.net"*"online in the tailnet"*"routes to the server over utun9"*"does not expire"*"ssh reaches dev@fake"*"path is direct"*"tmux is on the server"*"claude is on the server"*"65001 is free"*ready) ;; *) fail "check must answer every question in order (got '$out')" ;; esac
+touch "$FAKE_TS_NO_ROUTE" "$FAKE_SSH_DOWN"
+out="$(PATH="$tmp/fakebin:$tmp/tsbin:$PATH" bash "$tool/scripts/check" 2>&1)" && fail "a server not routed to must fail the check"
+case "$out" in *"ok:    server is online"*"FAIL:  the server is online, but this machine has no route"*"FAIL:  ssh does not reach"*"not ready") ;; *) fail "a missing route must be said among the answers (got '$out')" ;; esac
+[ "$(printf '%s\n' "$out" | grep -c "no route into the tailnet")" = "1" ] || fail "a missing route already said must not be repeated (got '$out')"
+rm -f "$FAKE_TS_NO_ROUTE" "$FAKE_SSH_DOWN"
 printf 'SERVER="dev@fake"\nTAILSCALE_NODE="sleeper"\n' >"$tool/config"
 touch "$FAKE_SSH_DOWN"
 out="$(PATH="$tmp/fakebin:$tmp/tsbin:$PATH" bash "$tool/scripts/check" 2>&1)" && fail "an unreachable server must fail the check"

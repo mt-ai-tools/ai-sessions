@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Asks, from this machine, whether the server is ready to be worked on:
 # the config loads, ssh gets in, tmux and claude are there, and — when the
-# server is reached through Tailscale — it is online, on a direct path, and
-# its key is not about to run out. One line per question; ends with a
-# failure status if any answer was no. Run it before a trip, or whenever a
-# session file does not attach and you want to know why.
+# server is reached through Tailscale — it is online, this machine has a
+# route to it, it is on a direct path, and its key is not about to run
+# out. One line per question; ends with a failure status if any answer was
+# no. Run it before a trip, or whenever a session file does not attach and
+# you want to know why.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/.." && pwd)"
@@ -36,6 +37,11 @@ if [ -n "$TAILSCALE_NODE" ]; then
         fail "$(tailscale_reason)"; tailscale_said=1
       elif [ "$TS_ONLINE" = "true" ]; then
         ok "server is online in the tailnet"
+        if tailscale_route_missing; then
+          fail "$(tailscale_reason)"; tailscale_said=1
+        elif [ -n "$TS_ROUTE_IFACE" ]; then
+          ok "this machine routes to the server over $TS_ROUTE_IFACE"
+        fi
       else
         fail "server is offline in the tailnet"; tailscale_said=1
       fi
