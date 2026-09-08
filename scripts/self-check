@@ -326,6 +326,33 @@ case "$out" in *tailnet*) fail "without TAILSCALE_NODE nothing about tailscale m
 case "$out" in *"reconnecting in 3s"*) ;; *) fail "the plain lost-link message must stay (got '$out')" ;; esac
 ok "reconnect away"
 
+# --- reconnect, terminal: a link lost mid-session leaves the terminal as
+# the session had it, mouse reporting on, and the mouse then types reports
+# into the window that the next ssh would hand on as keystrokes. So before
+# the loss is said the reporting is switched off and pending input thrown
+# away. This needs a terminal, made here with script, and fed the reports
+# as a session would have left them; the fake ssh lets them land, drops
+# the link, and on the next attach reads what its terminal still holds.
+# Only the BSD script takes a command this way; elsewhere this is skipped.
+if script -q /dev/null true >/dev/null 2>&1; then
+  cat >"$tmp/fakebin/ssh" <<'EOR'
+#!/usr/bin/env bash
+[ -f "$FAKE_DROPPED" ] || { sleep 1; touch "$FAKE_DROPPED"; exit 255; }
+stty -icanon min 0 time 3; dd bs=4096 count=1 2>/dev/null | tr -d '\004' >"$FAKE_STDIN_LOG"; stty sane
+echo "can't find session" >&2; exit 1
+EOR
+  chmod +x "$tmp/fakebin/ssh"
+  export FAKE_STDIN_LOG="$tmp/ssh.stdin"
+  rm -f "$FAKE_DROPPED" "$FAKE_STDIN_LOG"
+  out="$(printf '\033[<35;62;43M\033[<35;63;42M' | PATH="$tmp/fakebin:$PATH" script -q /dev/null bash "$tool/sessions/notes" 2>&1)" || true
+  case "$out" in *$'\033[?1000l'*$'\033[?1006l'*"link to dev@fake lost"*) ;; *) fail "mouse reporting must be switched off before a lost link is said (got '$(printf '%s' "$out" | cat -v)')" ;; esac
+  [ -f "$FAKE_STDIN_LOG" ] || fail "the second attach must have run under a terminal"
+  [ ! -s "$FAKE_STDIN_LOG" ] || fail "reports typed while the link was lost must not reach the session (got '$(cat -v "$FAKE_STDIN_LOG")')"
+  ok "reconnect terminal"
+else
+  ok "reconnect terminal (skipped: no BSD script to make a terminal)"
+fi
+
 # --- check: every question answered against the fakes, ready or not.
 cat >"$tmp/fakebin/ssh" <<'EOR'
 #!/usr/bin/env bash
