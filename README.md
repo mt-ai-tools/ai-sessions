@@ -122,6 +122,35 @@ a file here. A terminal that adds the name of the command a tab runs
 (macOS Terminal does) adds the file's name, which is the tmux name again,
 so a tab too narrow for the whole title still ends in the session's name.
 
+Selecting text with the mouse asks for a modifier: Claude Code turns on
+the terminal's mouse reporting, and the terminal hands the drag to the
+session instead of selecting. Hold fn on macOS, shift on Linux. Two
+settings on the server change it, in the login user's
+`~/.claude/settings.json`:
+
+```json
+{ "env": { "CLAUDE_CODE_DISABLE_MOUSE": "1" } }
+```
+
+reports nothing at all. Selection is the terminal's again, with no
+modifier, and the session loses what the mouse bought: clicking to place
+the cursor, clicking a collapsed tool result open — `ctrl+o` still opens
+it — text copying itself when selected, and the wheel scrolling the
+session rather than the terminal's own scrollback.
+
+```json
+{ "env": { "CLAUDE_CODE_DISABLE_MOUSE_CLICKS": "1" } }
+```
+
+keeps the wheel and drops the rest: the session is never told about
+drags and stops acting on clicks. The terminal is still asked to report
+the clicks themselves, so selection still wants the modifier. It is the
+setting for a session that should scroll but not answer the mouse, not
+the one that gives selection back.
+
+Either way it is read once, at startup: a session already running keeps
+the old behavior until the Claude inside it is restarted.
+
 The sessions folder is as fresh as the last time watch asked. A tmux
 session started elsewhere shows up on the next round; a Claude started
 outside tmux never does. On a server shared with others, the config can name
