@@ -319,13 +319,15 @@ case "$out" in *"Operation timed out"*) ;; *) fail "ssh's own error must stay (g
 ok "watch"
 
 # --- add: the folder is resolved on the server before the session starts,
-# and a folder the server does not have stops it. The fake ssh answers the
-# resolving with a path and records every tmux command it is handed.
+# and a folder the server does not have is created only when you say yes.
+# The fake ssh answers the resolving with a path, creates the folder when
+# asked, and records every tmux and mkdir command it is handed.
 cat >"$tmp/fakebin/ssh" <<'EOR'
 #!/usr/bin/env bash
 cmd="${*: -1}"
 case "$cmd" in
   *"cd -- "*) [ -f "$FAKE_NO_SUCH_DIR" ] || printf '/home/me/notes\n' ;;
+  *"mkdir -p -- "*) printf '%s\n' "$cmd" >>"$FAKE_TMUX_LOG"; rm -f "$FAKE_NO_SUCH_DIR" ;;
   *"tmux new-session"*|*"tmux attach"*) printf '%s\n' "$cmd" >>"$FAKE_TMUX_LOG" ;;
 esac
 EOR
@@ -339,10 +341,16 @@ grep -q -- "tmux new-session -A -d -s notes -c /home/me/notes" "$FAKE_TMUX_LOG" 
 grep -q -- "tmux attach -t notes" "$FAKE_TMUX_LOG" || fail "add must attach through the session's file (got '$(cat "$FAKE_TMUX_LOG")')"
 grep -q -- "set-titles-string \"#S\"" "$FAKE_TMUX_LOG" || fail "add must have tmux title the terminal after the session (got '$(cat "$FAKE_TMUX_LOG")')"
 touch "$FAKE_NO_SUCH_DIR"; rm -f "$FAKE_TMUX_LOG"; rm -rf "$tool/sessions"
-out="$(printf 'notes\nnope\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/add-session" 2>&1)" && fail "add must refuse a folder the server does not have"
+out="$(printf 'notes\nnope\nno\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/add-session" 2>&1)" && fail "add must refuse a missing folder it was not told to create"
 case "$out" in *"no such folder on the server: nope"*) ;; *) fail "add must say which folder is missing (got '$out')" ;; esac
-[ -e "$FAKE_TMUX_LOG" ] && fail "add must not start a session in a missing folder"
+[ -e "$FAKE_TMUX_LOG" ] && fail "add must neither create a folder nor start a session unless told yes (got '$(cat "$FAKE_TMUX_LOG")')"
 [ -e "$tool/sessions/notes" ] && fail "add must not write a file for a session it did not start"
+printf 'notes\nnope\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/add-session" >/dev/null 2>&1 && fail "add must refuse a missing folder when no answer comes"
+[ -e "$FAKE_TMUX_LOG" ] && fail "add must not act on a missing answer"
+printf 'notes\nnope\nyes\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/add-session" >/dev/null 2>&1 || fail "add must go on once a missing folder is created"
+grep -q -- "mkdir -p -- " "$FAKE_TMUX_LOG" || fail "add must create the folder when told yes (got '$(cat "$FAKE_TMUX_LOG")')"
+grep -q -- "tmux new-session -A -d -s notes -c /home/me/notes" "$FAKE_TMUX_LOG" || fail "add must start the session in the folder it created (got '$(cat "$FAKE_TMUX_LOG")')"
+[ -x "$tool/sessions/notes" ] || fail "add must write the file of a session in a created folder"
 ok "add"
 
 # --- attach: a session file puts the terminal into its session by name,

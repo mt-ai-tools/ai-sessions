@@ -84,7 +84,9 @@ chosen when a tmux session is started, never in the config.
 
 `scripts/add-session` asks for a tmux name and a folder on the server,
 relative to the login user's home or absolute, and starts Claude there
-inside tmux, attached. A folder the server does not have is refused.
+inside tmux, attached. A folder the server does not have is offered to
+be created: type `yes` and it is made, and the session starts in it;
+anything else and nothing is started.
 The tmux name becomes the file's name, so name a tmux session the way you
 want to see it in the folder.
 

@@ -31,18 +31,29 @@ remote_run() {
 # terminal printed while starting it is gone.
 wipe() { printf '\033[2J\033[3J\033[H'; }
 
-# Resolves a folder as the server sees it — relative to the login user's
-# home, a leading ~ expanded, or absolute — to its absolute path there.
-# Fails, saying so, when the folder does not exist: tmux would otherwise
-# start the session in the home folder without a word.
+# The shell, run on the server, that turns a folder as given — relative to
+# the login user's home, a leading ~ expanded, or absolute — into $d.
+remote_dir_expr() {
+  printf 'd=%q; case "$d" in %s) d="$HOME${d#%s}";; esac' "$1" "'~'|'~/'*" "'~'"
+}
+
+# Resolves a folder as the server sees it to its absolute path there.
+# Fails when the folder does not exist, for the caller to say so: tmux
+# would otherwise start the session in the home folder without a word.
+# Returns 255, as ssh does, when the server could not be reached, so a
+# lost link is never taken for a missing folder.
 resolve_remote_dir() {
-  local dir="$1" resolved
-  resolved="$(remote_run "d=$(printf %q "$dir"); case \"\$d\" in '~'|'~/'*) d=\"\$HOME\${d#'~'}\";; esac; cd -- \"\$d\" 2>/dev/null && pwd")" || true
-  if [ -z "$resolved" ]; then
-    echo "ai-sessions: no such folder on the server: $dir" >&2
-    return 1
-  fi
+  local resolved status=0
+  resolved="$(remote_run "$(remote_dir_expr "$1"); cd -- \"\$d\" 2>/dev/null && pwd")" || status=$?
+  [ "$status" -eq "$SSH_LINK_LOST" ] && return "$status"
+  [ -n "$resolved" ] || return 1
   printf '%s' "$resolved"
+}
+
+# Creates a folder on the server, given the way resolve_remote_dir takes
+# it, with any folders above it that are missing too.
+make_remote_dir() {
+  remote_run "$(remote_dir_expr "$1"); mkdir -p -- \"\$d\""
 }
 
 # Hands your terminal to a command on the server. For attaching to a
