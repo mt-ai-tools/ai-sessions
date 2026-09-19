@@ -10,7 +10,7 @@ root="$(cd "$here/.." && pwd)"
 . "$root/helpers/remote.sh"
 
 load_config
-export SERVER TMUX_SESSIONS="${TMUX_SESSIONS:-}" TAILSCALE_NODE="${TAILSCALE_NODE:-}"
+export SERVER TMUX_SESSIONS="${TMUX_SESSIONS:-}" TAILSCALE_NODE="${TAILSCALE_NODE:-}" NUMBER_SESSIONS="${NUMBER_SESSIONS:-}"
 
 # Names the window after the server, so a terminal's tab says what it is
 # watching instead of which process it is running.

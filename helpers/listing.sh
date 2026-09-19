@@ -7,8 +7,10 @@
 LISTING_TAB=$'\t'
 
 # The tmux format string the server is asked for, one line per pane. The
-# attached flag says whether someone is already looking at the session.
-TMUX_PANE_FORMAT="#{session_name}${LISTING_TAB}#{pane_current_path}${LISTING_TAB}#{pane_current_command}${LISTING_TAB}#{session_attached}"
+# attached flag says whether someone is already looking at the session; the
+# last column is when the session started, in seconds since the epoch, which
+# orders the sessions folder and is not shown.
+TMUX_PANE_FORMAT="#{session_name}${LISTING_TAB}#{pane_current_path}${LISTING_TAB}#{pane_current_command}${LISTING_TAB}#{session_attached}${LISTING_TAB}#{session_created}"
 
 # The command run on the server. Exit 0 with no output when tmux has no
 # server running, since that is "no sessions", not an error.
@@ -57,9 +59,12 @@ format_listing() {
     }'
 }
 
-# The names alone, one per line.
-listing_names() {
-  cut -f1
+# Each session once, oldest first: its name and when it started, separated
+# by a tab. A session has a line per pane, so it is kept only the first time.
+# Sessions started in the same second are ordered by name.
+listing_by_age() {
+  awk -F "$LISTING_TAB" -v OFS="$LISTING_TAB" '$1 != "" && !seen[$1]++ { print $1, $5 }' |
+    sort -t "$LISTING_TAB" -k2,2n -k1,1
 }
 
 # Keeps only the lines whose tmux session is among the names given,

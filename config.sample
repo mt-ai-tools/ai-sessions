@@ -16,6 +16,13 @@ REFRESH_SECONDS=""
 # shared with others, name yours here and see only those.
 TMUX_SESSIONS=""
 
+# Whether the sessions folder numbers its files in the order the sessions
+# were started: "001 notes", "002 recipes", and so on. The number moves up
+# when an older session ends, and is only ever in the file's name — the tmux
+# session keeps the name you gave it. Anything but "true", or the key left
+# out, names each file after its session alone.
+NUMBER_SESSIONS="true"
+
 # The server's name in Tailscale, when it is reached that way: its
 # machine name, its full ts.net name, or its 100.x address. Lets the tool
 # say why a link is lost, and check the server before a trip. Empty means

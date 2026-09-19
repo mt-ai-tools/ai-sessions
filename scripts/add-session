@@ -49,5 +49,16 @@ dir="$resolved"
 # the tab after the file, that is after the session. -A with -d leaves a
 # session of that name alone if it already runs, so this only ever attaches.
 remote_run "tmux new-session -A -d -s $(printf %q "$name") -c $(printf %q "$dir") $(printf %q "$NEW_SESSION_COMMAND")"
-write_session_file "$name"
-exec "$SESSIONS_DIR/$name$SESSION_FILE_SUFFIX"
+# The folder is written afresh from the server's listing, so the new
+# session's file takes its place among the others. A listing that does not
+# come, or leaves the session out, still gets it a file under its own name.
+file=""
+if raw="$(remote_run "$(list_panes_command)" | filter_listing "${TMUX_SESSIONS:-}")" && [ -n "$raw" ]; then
+  clear_session_files
+  file="$(printf '%s\n' "$raw" | write_session_files "$name")"
+fi
+if [ -z "$file" ]; then
+  file="$name"
+  write_session_file "$name"
+fi
+exec "$SESSIONS_DIR/$file$SESSION_FILE_SUFFIX"

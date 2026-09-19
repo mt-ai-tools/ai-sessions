@@ -30,6 +30,9 @@ out="$(bash -c ". '$tool/helpers/config.sh' && load_config && printf '%s' \"\$SE
 [ "$out" = "dev@fake" ] || fail "complete config must load SERVER"
 out="$(bash -c ". '$tool/helpers/config.sh' && load_config && printf '%s|%s' \"\$TMUX_SESSIONS\" \"\$TAILSCALE_NODE\"")"
 [ "$out" = "|" ] || fail "keys the config leaves out must load empty (got '$out')"
+out="$(bash -c ". '$tool/helpers/config.sh' && load_config && printf '%s' \"\$NUMBER_SESSIONS\"")"
+[ -z "$out" ] || fail "numbering must be off when the config leaves it out (got '$out')"
+grep -qx 'NUMBER_SESSIONS="true"' "$tool/config.sample" || fail "the sample must ship with numbering on"
 ok "config"
 
 # --- forward: a port is brought over by a link of its own, said to be in
@@ -106,7 +109,7 @@ ok "session file"
 mkdir "$tmp/fakebin"
 printf '#!/usr/bin/env bash\nprintf "%%s\\n" %q\n' $'notes\t/home/me/notes\tclaude\t0\nrecipes\t/home/me/recipes\tclaude\t1' >"$tmp/fakebin/ssh"
 chmod +x "$tmp/fakebin/ssh"
-refresh() { PATH="$tmp/fakebin:$PATH" bash -c ". '$tool/helpers/config.sh' && load_config && export SERVER TMUX_SESSIONS=\${TMUX_SESSIONS:-} && bash '$tool/helpers/refresh.sh'"; }
+refresh() { PATH="$tmp/fakebin:$PATH" bash -c ". '$tool/helpers/config.sh' && load_config && export SERVER TMUX_SESSIONS NUMBER_SESSIONS && bash '$tool/helpers/refresh.sh'"; }
 out="$(refresh)"
 case "$out" in *notes*recipes*) ;; *) fail "refresh must print the table (got '$out')" ;; esac
 [ -x "$tool/sessions/notes" ] && [ -x "$tool/sessions/recipes" ] || fail "refresh must write one file per session"
@@ -115,6 +118,25 @@ out="$(refresh)"
 case "$out" in *"no tmux sessions running on dev@fake"*) ;; *) fail "no sessions must be said plainly" ;; esac
 [ -e "$tool/sessions/notes" ] && fail "refresh must clear files for sessions that are gone"
 ok "refresh"
+
+# --- numbering: with NUMBER_SESSIONS on, each file carries its place by
+# start time, oldest first, a session with several panes counted once;
+# the tmux name inside is untouched. Every file is dated when its session
+# started. Off, the files are named after their sessions alone.
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" %q\n' $'notes\t/home/me/notes\tclaude\t0\t1726000300\nrecipes\t/home/me/recipes\tclaude\t1\t1726000100\nrecipes\t/home/me/recipes\tbash\t1\t1726000100\nalpha\t/home/me/alpha\tclaude\t0\t1726000200' >"$tmp/fakebin/ssh"
+printf 'SERVER="dev@fake"\nNUMBER_SESSIONS="true"\n' >"$tool/config"
+refresh >/dev/null
+[ "$(ls "$tool/sessions" | tr '\n' '|')" = "001 recipes|002 alpha|003 notes|" ] || fail "files must be numbered oldest first, once per session (got '$(ls "$tool/sessions" | tr '\n' '|')')"
+grep -q "attach.sh\" recipes$" "$tool/sessions/001 recipes" || fail "a numbered file must attach to the tmux name alone"
+[ "$tool/sessions/002 alpha" -nt "$tool/sessions/001 recipes" ] && [ "$tool/sessions/003 notes" -nt "$tool/sessions/002 alpha" ] || fail "files must be dated in the order their sessions started"
+touch "$tmp/now"
+[ "$tool/sessions/003 notes" -ot "$tmp/now" ] || fail "a file must carry its session's start, not the time it was written"
+printf 'SERVER="dev@fake"\nNUMBER_SESSIONS="false"\n' >"$tool/config"
+refresh >/dev/null
+[ "$(ls "$tool/sessions" | tr '\n' '|')" = "alpha|notes|recipes|" ] || fail "without numbering files must be named after their sessions (got '$(ls "$tool/sessions" | tr '\n' '|')')"
+[ "$tool/sessions/notes" -nt "$tool/sessions/recipes" ] || fail "files must be dated with numbering off too"
+printf 'SERVER="dev@fake"\n' >"$tool/config"
+ok "numbering"
 
 # --- the clock: the default holds when the config is silent, the config wins
 out="$(bash -c ". '$tool/helpers/config.sh' && load_config && printf '%s' \"\$REFRESH_SECONDS\"")"
@@ -351,6 +373,17 @@ printf 'notes\nnope\nyes\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/add-
 grep -q -- "mkdir -p -- " "$FAKE_TMUX_LOG" || fail "add must create the folder when told yes (got '$(cat "$FAKE_TMUX_LOG")')"
 grep -q -- "tmux new-session -A -d -s notes -c /home/me/notes" "$FAKE_TMUX_LOG" || fail "add must start the session in the folder it created (got '$(cat "$FAKE_TMUX_LOG")')"
 [ -x "$tool/sessions/notes" ] || fail "add must write the file of a session in a created folder"
+# Numbering on, and the server listing the new session among an older one:
+# its file takes its place, and it is attached through that file.
+cat >>"$tmp/fakebin/ssh" <<'EOR'
+case "${*: -1}" in *"tmux list-panes"*) printf 'older\t/home/me/o\tclaude\t0\t100\nnotes\t/home/me/notes\tclaude\t0\t200\n' ;; esac
+EOR
+printf 'SERVER="dev@fake"\nNUMBER_SESSIONS="true"\n' >"$tool/config"
+rm -f "$FAKE_TMUX_LOG"; rm -rf "$tool/sessions"
+printf 'notes\n~/notes\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/add-session" >/dev/null 2>&1 || fail "add must start a numbered session"
+[ "$(ls "$tool/sessions" | tr '\n' '|')" = "001 older|002 notes|" ] || fail "add must write the folder numbered (got '$(ls "$tool/sessions" | tr '\n' '|')')"
+grep -q -- "tmux attach -t notes" "$FAKE_TMUX_LOG" || fail "add must attach to the tmux name, not the file's (got '$(cat "$FAKE_TMUX_LOG")')"
+printf 'SERVER="dev@fake"\n' >"$tool/config"
 ok "add"
 
 # --- attach: a session file puts the terminal into its session by name,

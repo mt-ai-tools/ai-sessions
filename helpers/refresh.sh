@@ -27,7 +27,4 @@ if [ -z "$raw" ]; then
 fi
 
 printf '%s\n' "$raw" | format_listing
-while IFS= read -r name; do
-  [ -n "$name" ] || continue
-  write_session_file "$name"
-done < <(printf '%s\n' "$raw" | listing_names)
+printf '%s\n' "$raw" | write_session_files

@@ -96,6 +96,16 @@ after it. It keeps asking, on a clock the config can set, until you stop
 it. Open a file and a terminal attaches to that tmux session; close the
 window and it keeps running.
 
+With `NUMBER_SESSIONS="true"`, as the sample ships, each file's name starts
+with its place in the order the sessions were started: `001 notes`,
+`002 recipes`, `003 notes-2`. The folder then lists them oldest first, so
+after a string of sessions, each started from the one before, you still
+see which came after which. The number is a place, not a name: when an
+older session ends, the ones after it move up one on the next round. It
+is only in the file's name; tmux, the watch window and the title bar keep
+the name you gave. Numbered or not, each file is dated when its session
+started, so sorting the folder by date gives the same order.
+
 A closed lid, or any sleep, loses the link to the server but not the
 session. The window says so and attaches again as soon as the server
 answers, so it is back in the session moments after the lid opens, without
@@ -122,7 +132,8 @@ name, so two windows into two sessions are told apart at the top; tmux
 sets it on every attach, whether the window came from add-session or from
 a file here. A terminal that adds the name of the command a tab runs
 (macOS Terminal does) adds the file's name, which is the tmux name again,
-so a tab too narrow for the whole title still ends in the session's name.
+behind its number if the folder is numbered, so a tab too narrow for the
+whole title still ends in the session's name.
 
 The sessions folder is as fresh as the last time watch asked. A tmux
 session started elsewhere shows up on the next round; a Claude started
