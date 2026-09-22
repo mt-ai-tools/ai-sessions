@@ -86,7 +86,8 @@ chosen when a tmux session is started, never in the config.
 relative to the login user's home or absolute, and starts Claude there
 inside tmux, attached. A folder the server does not have is offered to
 be created: type `yes` and it is made, and the session starts in it;
-anything else and nothing is started.
+anything else and nothing is started. A name the server already runs a
+tmux session under is refused, and nothing is started.
 The tmux name becomes the file's name, so name a tmux session the way you
 want to see it in the folder.
 

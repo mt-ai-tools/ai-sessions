@@ -19,6 +19,19 @@ NEW_SESSION_COMMAND='bash -lc claude'
 load_config
 wipe
 read -r -p "session name: " name
+[ -n "$name" ] || { echo "both are needed" >&2; exit 1; }
+# A name the server already runs is refused here, before the folder is
+# asked for: tmux would otherwise keep the running session and only attach.
+# The = makes tmux match the name exactly, not as a prefix.
+status=0
+remote_run "tmux has-session -t $(printf %q "=$name") 2>/dev/null" || status=$?
+if [ "$status" -eq "$SSH_LINK_LOST" ]; then
+  echo "ai-sessions: could not reach $SERVER" >&2
+  exit 1
+elif [ "$status" -eq 0 ]; then
+  echo "ai-sessions: a session named \"$name\" already runs on the server; pick another name" >&2
+  exit 1
+fi
 echo
 echo "Examples:"
 printf '%-24s %s\n' "my-folder" "/home/my-user/my-folder" \
@@ -47,7 +60,7 @@ dir="$resolved"
 # Started detached, then attached through the session's own file, the same
 # way as from the folder: one path into a session, and the terminal names
 # the tab after the file, that is after the session. -A with -d leaves a
-# session of that name alone if it already runs, so this only ever attaches.
+# session of that name alone should one have started since the check above.
 remote_run "tmux new-session -A -d -s $(printf %q "$name") -c $(printf %q "$dir") $(printf %q "$NEW_SESSION_COMMAND")"
 # The folder is written afresh from the server's listing, so the new
 # session's file takes its place among the others. A listing that does not
