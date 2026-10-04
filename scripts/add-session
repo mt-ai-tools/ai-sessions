@@ -62,16 +62,18 @@ dir="$resolved"
 # the tab after the file, that is after the session. -A with -d leaves a
 # session of that name alone should one have started since the check above.
 remote_run "tmux new-session -A -d -s $(printf %q "$name") -c $(printf %q "$dir") $(printf %q "$NEW_SESSION_COMMAND")"
-# The folder is written afresh from the server's listing, so the new
+# The folder is brought up to date from the server's listing, so the new
 # session's file takes its place among the others. A listing that does not
 # come, or leaves the session out, still gets it a file under its own name.
 file=""
 if raw="$(remote_run "$(list_panes_command)" | filter_listing "${TMUX_SESSIONS:-}")" && [ -n "$raw" ]; then
-  clear_session_files
   file="$(printf '%s\n' "$raw" | write_session_files "$name")"
 fi
 if [ -z "$file" ]; then
   file="$name"
   write_session_file "$name"
 fi
-exec "$SESSIONS_DIR/$file$SESSION_FILE_SUFFIX"
+# Run by bash, not as a program of its own: macOS checks a file the first
+# time it runs as one, and kills it should anything disturb the check. The
+# terminal sees the same command either way, bash with the file's name.
+exec bash "$SESSIONS_DIR/$file$SESSION_FILE_SUFFIX"

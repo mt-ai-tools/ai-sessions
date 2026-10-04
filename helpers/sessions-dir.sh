@@ -22,16 +22,27 @@ SESSION_FILE_SUFFIX=""
 # Usage: <tmux name> [file name] [start time]. The file is named after the
 # session unless told otherwise, and dated when the session started when
 # that is given.
+#
+# A file that already says the same is left as it is, and a changed one is
+# put in place whole, by a rename. A file open in a terminal is never taken
+# away and written again: macOS checks a file the first time it runs, and
+# one that goes missing mid-check is killed, as if it had failed.
 write_session_file() {
-  local name="$1" file="$SESSIONS_DIR/${2:-$1}$SESSION_FILE_SUFFIX"
+  local name="$1" file="$SESSIONS_DIR/${2:-$1}$SESSION_FILE_SUFFIX" text new
   mkdir -p "$SESSIONS_DIR"
-  cat >"$file" <<EOT
+  text="$(cat <<EOT
 #!/usr/bin/env bash
 # Written by refresh for the session named below; the next refresh rewrites
 # it. Open in a terminal to attach.
 "\$(dirname "\${BASH_SOURCE[0]}")/../helpers/attach.sh" $(printf %q "$name")
 EOT
-  chmod +x "$file"
+)"
+  if [ ! -x "$file" ] || [ "$(cat "$file" 2>/dev/null)" != "$text" ]; then
+    new="$SESSIONS_DIR/.${2:-$1}.new"
+    printf '%s\n' "$text" >"$new"
+    chmod +x "$new"
+    mv -f "$new" "$file"
+  fi
   [ -z "${3:-}" ] || date_file "$file" "$3"
 }
 
@@ -62,18 +73,24 @@ session_file_name() {
 }
 
 # Writes the file of every session, given the server's listing on stdin,
-# and prints the file name of the one named, if given and listed.
+# removes the files of sessions no longer listed, and prints the file name
+# of the one named, if given and listed. Files that stay are left alone.
 write_session_files() {
-  local only="${1:-}" place=0 name created file
+  local only="${1:-}" place=0 name created file kept=$'\n' path
   while IFS="$LISTING_TAB" read -r name created; do
     place=$((place + 1))
     file="$(session_file_name "$place" "$name")"
     write_session_file "$name" "$file" "$created"
+    kept="$kept$file$SESSION_FILE_SUFFIX"$'\n'
     [ "$name" != "$only" ] || printf '%s' "$file"
   done < <(listing_by_age)
+  for path in "$SESSIONS_DIR"/*"$SESSION_FILE_SUFFIX"; do
+    [ -e "$path" ] || continue
+    case "$kept" in *$'\n'"${path##*/}"$'\n'*) ;; *) rm -f "$path" ;; esac
+  done
 }
 
-# Clears the folder so it holds only what the server reported this time.
+# Clears the folder, for when the server runs no session at all.
 clear_session_files() {
   mkdir -p "$SESSIONS_DIR"
   rm -f "$SESSIONS_DIR"/*"$SESSION_FILE_SUFFIX"

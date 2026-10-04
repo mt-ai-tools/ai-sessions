@@ -20,8 +20,8 @@ if [ "$status" -eq "$SSH_LINK_LOST" ]; then
 fi
 [ "$status" -eq 0 ] || exit "$status"
 
-clear_session_files
 if [ -z "$raw" ]; then
+  clear_session_files
   echo "no tmux sessions running on $SERVER${TMUX_SESSIONS:+ named $TMUX_SESSIONS}"
   exit 0
 fi

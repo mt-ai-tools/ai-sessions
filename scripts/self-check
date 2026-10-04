@@ -113,6 +113,15 @@ refresh() { PATH="$tmp/fakebin:$PATH" bash -c ". '$tool/helpers/config.sh' && lo
 out="$(refresh)"
 case "$out" in *notes*recipes*) ;; *) fail "refresh must print the table (got '$out')" ;; esac
 [ -x "$tool/sessions/notes" ] && [ -x "$tool/sessions/recipes" ] || fail "refresh must write one file per session"
+# A file that stays the same is the same file after the next refresh: a
+# file being opened must never go missing under a terminal.
+before="$(ls -i "$tool/sessions/notes")"
+refresh >/dev/null
+[ "$(ls -i "$tool/sessions/notes")" = "$before" ] || fail "refresh must leave an unchanged file in place, not write it anew"
+printf 'old\n' >"$tool/sessions/notes"
+refresh >/dev/null
+grep -q "attach.sh" "$tool/sessions/notes" || fail "refresh must rewrite a file that says something else"
+[ -z "$(ls -A "$tool/sessions" | grep '^\.')" ] || fail "refresh must leave no half-written files behind"
 printf '#!/usr/bin/env bash\nprintf ""\n' >"$tmp/fakebin/ssh"
 out="$(refresh)"
 case "$out" in *"no tmux sessions running on dev@fake"*) ;; *) fail "no sessions must be said plainly" ;; esac
@@ -342,12 +351,14 @@ ok "watch"
 
 # --- add: the folder is resolved on the server before the session starts,
 # and a folder the server does not have is created only when you say yes.
-# The fake ssh answers the resolving with a path, creates the folder when
-# asked, and records every tmux and mkdir command it is handed.
+# The fake ssh runs no session yet, answers the resolving with a path,
+# creates the folder when asked, and records every tmux and mkdir command
+# it is handed.
 cat >"$tmp/fakebin/ssh" <<'EOR'
 #!/usr/bin/env bash
 cmd="${*: -1}"
 case "$cmd" in
+  *"tmux has-session"*) exit 1 ;;
   *"cd -- "*) [ -f "$FAKE_NO_SUCH_DIR" ] || printf '/home/me/notes\n' ;;
   *"mkdir -p -- "*) printf '%s\n' "$cmd" >>"$FAKE_TMUX_LOG"; rm -f "$FAKE_NO_SUCH_DIR" ;;
   *"tmux new-session"*|*"tmux attach"*) printf '%s\n' "$cmd" >>"$FAKE_TMUX_LOG" ;;
@@ -383,6 +394,7 @@ rm -f "$FAKE_TMUX_LOG"; rm -rf "$tool/sessions"
 printf 'notes\n~/notes\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/add-session" >/dev/null 2>&1 || fail "add must start a numbered session"
 [ "$(ls "$tool/sessions" | tr '\n' '|')" = "001 older|002 notes|" ] || fail "add must write the folder numbered (got '$(ls "$tool/sessions" | tr '\n' '|')')"
 grep -q -- "tmux attach -t notes" "$FAKE_TMUX_LOG" || fail "add must attach to the tmux name, not the file's (got '$(cat "$FAKE_TMUX_LOG")')"
+grep -q -- '^exec bash "$SESSIONS_DIR/' "$tool/scripts/add-session" || fail "add must run the session file through bash, not as a program macOS checks first"
 printf 'SERVER="dev@fake"\n' >"$tool/config"
 ok "add"
 
