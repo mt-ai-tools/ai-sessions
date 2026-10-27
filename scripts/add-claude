@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Starts Claude on the server, in a folder there, inside a session of its
+# own, and attaches to it. Asks for the session's name and the folder.
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec bash "$here/../helpers/new-session.sh" claude

@@ -3,17 +3,16 @@
 # Asks for the name and the folder; the folder is as the server sees it,
 # relative to the login user's home or absolute. A folder the server does
 # not have is offered to be created, and the session starts only in one
-# that exists. With --shell, the session runs the login user's own shell
-# instead of Claude: see add-shell.
+# that exists. What runs in it is given: claude, or the login user's own
+# shell. add-claude and add-shell run this; nothing else starts a session.
 #
-# Usage: add-session [--shell]
+# Usage: new-session.sh claude|shell
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-root="$(cd "$here/.." && pwd)"
-. "$root/helpers/config.sh"
-. "$root/helpers/remote.sh"
-. "$root/helpers/sessions-dir.sh"
-. "$root/helpers/state.sh"
+. "$here/config.sh"
+. "$here/remote.sh"
+. "$here/sessions-dir.sh"
+. "$here/state.sh"
 
 # What a new session runs. A login shell so the server's own PATH — where a
 # per-user tool like claude lives — is the one in effect, and the session
@@ -24,8 +23,11 @@ NEW_SESSION_COMMAND='claude --settings "$1"'
 
 # A shell session is handed no command: tmux then starts the user's own
 # shell, as a login shell, so the server's PATH is in effect there too.
-session_command="bash -lc $(printf %q "$NEW_SESSION_COMMAND") ai-sessions $(printf %q "$(claude_state_settings)")"
-[ "${1:-}" = "--shell" ] && session_command=""
+case "${1:-}" in
+  claude) session_command="bash -lc $(printf %q "$NEW_SESSION_COMMAND") ai-sessions $(printf %q "$(claude_state_settings)")" ;;
+  shell) session_command="" ;;
+  *) echo "usage: new-session.sh claude|shell" >&2; exit 1 ;;
+esac
 
 load_config
 wipe

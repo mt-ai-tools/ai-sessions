@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Starts a shell on the server, in a folder there, and attaches to it: for
 # what you run by hand, such as a dev server, rather than through Claude.
-# A session like any other — asked for the same way as add-session asks,
+# A session like any other — asked for the same way as add-claude asks,
 # kept in tmux, listed in the sessions folder, and attached again after a
 # lost link — only with no Claude in it, so its title carries no dot.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec bash "$here/add-session" --shell
+exec bash "$here/../helpers/new-session.sh" shell

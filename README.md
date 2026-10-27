@@ -76,13 +76,14 @@ changes, the session files and everything else stay.
 
 ## Use
 
-A session here is a tmux session on the server with one Claude running
-in one folder, under the tmux name you give it. Several projects on the
-server are several tmux sessions, one per project, each in its own
-folder; two Claudes on one project are two tmux sessions. The folder is
+A session here is a tmux session on the server running one thing in one
+folder — Claude, or your own shell — under the tmux name you give it.
+Several projects on the server are several tmux sessions, one per
+project, each in its own folder; two Claudes on one project are two tmux
+sessions, and a dev server beside them is a third. The folder is
 chosen when a tmux session is started, never in the config.
 
-`scripts/add-session` asks for a tmux name and a folder on the server,
+`scripts/add-claude` asks for a tmux name and a folder on the server,
 relative to the login user's home or absolute, and starts Claude there
 inside tmux, attached. A folder the server does not have is offered to
 be created: type `yes` and it is made, and the session starts in it;
@@ -136,7 +137,7 @@ session's is, and the port comes back with it.
 
 Open the files in a terminal. The window's title bar carries the tmux
 name, so two windows into two sessions are told apart at the top; tmux
-sets it on every attach, whether the window came from add-session or from
+sets it on every attach, whether the window came from add-claude, add-shell or from
 a file here. A terminal that adds the name of the command a tab runs
 (macOS Terminal does) adds the file's name, which is the tmux name again,
 behind its number if the folder is numbered, so a tab too narrow for the
@@ -148,7 +149,7 @@ approve — 🟢 done, and 🟠 stopped, a turn you broke off with escape. So a
 row of tabs shows at a glance which ones want you. tmux's status line, at
 the foot of the window, takes the same colours. No dot means Claude has
 ended there, or was started without the dot. Claude says its state
-itself, through hooks add-session hands it as it starts; they join any
+itself, through hooks add-claude hands it as it starts; they join any
 hooks of your own or a project's, and put nothing in the server's
 settings. When a turn is over, though, no hook can say: another Stop
 hook of yours may run for minutes or send Claude back to work, a message
@@ -157,7 +158,7 @@ none at all. So the screen settles it: while Claude works its spinner
 never rests, and once a working session's screen has been still for five
 seconds, the turn is over — green, or orange when it was broken off.
 Both arrive those few seconds late. A session started before the
-dot, or by hand, shows none until it is started again with add-session.
+dot, or by hand, shows none until it is started again with add-claude.
 
 The sessions folder is as fresh as the last time watch asked. A tmux
 session started elsewhere shows up on the next round; a Claude started
