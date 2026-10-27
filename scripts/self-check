@@ -361,7 +361,7 @@ case "$cmd" in
   *"tmux has-session"*) exit 1 ;;
   *"cd -- "*) [ -f "$FAKE_NO_SUCH_DIR" ] || printf '/home/me/notes\n' ;;
   *"mkdir -p -- "*) printf '%s\n' "$cmd" >>"$FAKE_TMUX_LOG"; rm -f "$FAKE_NO_SUCH_DIR" ;;
-  *"tmux new-session"*|*"tmux attach"*) printf '%s\n' "$cmd" >>"$FAKE_TMUX_LOG" ;;
+  *"tmux new-session"*|*"tmux -u attach"*) printf '%s\n' "$cmd" >>"$FAKE_TMUX_LOG" ;;
 esac
 EOR
 chmod +x "$tmp/fakebin/ssh"
@@ -371,8 +371,8 @@ rm -rf "$tool/sessions"; rm -f "$FAKE_TMUX_LOG"
 printf 'notes\n~/notes\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/add-session" >/dev/null 2>&1 || fail "add must start a session in an existing folder"
 grep -q -- "tmux new-session -A -d -s notes -c /home/me/notes" "$FAKE_TMUX_LOG" || fail "add must start the session detached in the resolved folder (got '$(cat "$FAKE_TMUX_LOG")')"
 [ -x "$tool/sessions/notes" ] || fail "add must write the session's file"
-grep -q -- "tmux attach -t notes" "$FAKE_TMUX_LOG" || fail "add must attach through the session's file (got '$(cat "$FAKE_TMUX_LOG")')"
-grep -q -- "set-titles-string \"#S\"" "$FAKE_TMUX_LOG" || fail "add must have tmux title the terminal after the session (got '$(cat "$FAKE_TMUX_LOG")')"
+grep -q -- "tmux -u attach -t notes" "$FAKE_TMUX_LOG" || fail "add must attach through the session's file (got '$(cat "$FAKE_TMUX_LOG")')"
+grep -q -- 'set-titles-string "#S#{?.*@claude.*}"' "$FAKE_TMUX_LOG" || fail "add must have tmux title the terminal after the session and its state (got '$(cat "$FAKE_TMUX_LOG")')"
 touch "$FAKE_NO_SUCH_DIR"; rm -f "$FAKE_TMUX_LOG"; rm -rf "$tool/sessions"
 out="$(printf 'notes\nnope\nno\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/add-session" 2>&1)" && fail "add must refuse a missing folder it was not told to create"
 case "$out" in *"no such folder on the server: nope"*) ;; *) fail "add must say which folder is missing (got '$out')" ;; esac
@@ -393,7 +393,104 @@ printf 'SERVER="dev@fake"\nNUMBER_SESSIONS="true"\n' >"$tool/config"
 rm -f "$FAKE_TMUX_LOG"; rm -rf "$tool/sessions"
 printf 'notes\n~/notes\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/add-session" >/dev/null 2>&1 || fail "add must start a numbered session"
 [ "$(ls "$tool/sessions" | tr '\n' '|')" = "001 older|002 notes|" ] || fail "add must write the folder numbered (got '$(ls "$tool/sessions" | tr '\n' '|')')"
-grep -q -- "tmux attach -t notes" "$FAKE_TMUX_LOG" || fail "add must attach to the tmux name, not the file's (got '$(cat "$FAKE_TMUX_LOG")')"
+grep -q -- "tmux -u attach -t notes" "$FAKE_TMUX_LOG" || fail "add must attach to the tmux name, not the file's (got '$(cat "$FAKE_TMUX_LOG")')"
+# The session starts Claude with the hooks that say its state. Read back
+# the way the server's shell reads it: the settings are one argument of
+# their own, and each hook, run as Claude runs it, keeps its state on the
+# session Claude runs in, prints nothing and succeeds.
+start="$(grep -- "tmux new-session" "$FAKE_TMUX_LOG" | tail -1)"
+eval "set -- $start"
+[ "$#" -ge 4 ] && [ "${*: -4:1}" = "-lc" ] && [ "${*: -3:1}" = 'claude --settings "$1"' ] || fail "add must start claude with the settings as an argument of their own (got '$start')"
+settings="${*: -1}"
+hook_command() {
+  local c="${settings#*\"$1\":\[\{}"
+  c="${c#*\"command\":\"}"
+  c="${c%%\"\}\]\}\]*}"
+  c="${c//\\\\/$'\001'}"; c="${c//\\n/$'\n'}"; c="${c//\\\"/\"}"
+  printf '%s' "${c//$'\001'/\\}"
+}
+mkdir -p "$tmp/statebin" "$tmp/opts"
+# The fake tmux keeps each option of the session in a file of its own,
+# says when the window last changed from another, and records each word
+# it is told to store.
+cat >"$tmp/statebin/tmux" <<'EOR'
+#!/bin/sh
+case "$1" in
+  show-options) for name; do :; done; cat "$FAKE_OPTS/$name" 2>/dev/null; exit 0 ;;
+  display-message) cat "$FAKE_ACTIVITY" 2>/dev/null; exit 0 ;;
+esac
+while [ "$#" -gt 0 ]; do
+  [ "$1" = set-option ] || { shift; continue; }
+  shift; unset_it=""; [ "$1" = -u ] && { unset_it=yes; shift; }
+  shift 2; name="$1"; shift
+  if [ -n "$unset_it" ]; then rm -f "$FAKE_OPTS/$name"; [ "$name" = @claude ] && echo "unset" >>"$FAKE_STATE_LOG"
+  else printf '%s\n' "$1" >"$FAKE_OPTS/$name"; [ "$name" = @claude ] && echo "$1" >>"$FAKE_STATE_LOG"; shift; fi
+done
+EOR
+chmod +x "$tmp/statebin/tmux"
+export FAKE_STATE_LOG="$tmp/state.log" FAKE_OPTS="$tmp/opts" FAKE_ACTIVITY="$tmp/activity"
+opt() { cat "$tmp/opts/$1" 2>/dev/null; }
+busy() { date +%s >"$FAKE_ACTIVITY"; }
+still() { echo $(( $(date +%s) - 60 )) >"$FAKE_ACTIVITY"; }
+# Runs a hook and gives the words it stored, one per line.
+run_hook() {
+  rm -f "$FAKE_STATE_LOG"
+  out="$(printf '%s' "$2" | TMUX_PANE=%9 PATH="$tmp/statebin:$PATH" sh -c "$(hook_command "$1")" 2>&1)" || fail "the $1 hook must succeed (got '$out')"
+  [ -z "$out" ] || fail "the $1 hook must print nothing (got '$out')"
+  cat "$FAKE_STATE_LOG" 2>/dev/null
+}
+# Lets any watch see the session is no longer working, and end.
+end_watch() { echo done >"$tmp/opts/@claude"; sleep 3; }
+# The hook lets go of its output at once, though its watch goes on: Claude
+# reads a hook's output to its end. A reader on a pipe must see that end.
+busy
+mkfifo "$tmp/hook.fifo"
+cat "$tmp/hook.fifo" >/dev/null &
+reader=$!
+printf '{}' | TMUX_PANE=%9 PATH="$tmp/statebin:$PATH" sh -c "$(hook_command UserPromptSubmit)" >"$tmp/hook.fifo" 2>&1
+sleep 1
+held=""; kill -0 "$reader" 2>/dev/null && { held=yes; kill "$reader"; }
+end_watch
+[ -z "$held" ] || fail "a message sent must let go of the hook's output at once, though its watch goes on"
+# The words each hook stores.
+busy
+[ "$(run_hook UserPromptSubmit '{}')" = "working" ] && [ "$(opt @claude_stop)" = 0 ] || fail "a message sent must read as working, no Stop hook since"
+[ "$(run_hook PreToolUse '{"tool_name":"Bash"}')" = "working" ] || fail "a tool about to run must read as working"
+[ "$(run_hook PreToolUse '{"tool_name": "AskUserQuestion"}')" = "waiting" ] || fail "a question to you must read as waiting"
+[ "$(run_hook PreToolUse '{"tool_name":"ExitPlanMode"}')" = "waiting" ] || fail "a plan put up for approval must read as waiting"
+[ "$(run_hook PostToolUse '{}')" = "working" ] || fail "a tool just run must read as working"
+[ "$(run_hook Notification '{}')" = "waiting" ] || fail "a permission asked must read as waiting"
+case "$settings" in *'"Notification":[{"matcher":"permission_prompt|elicitation_dialog"'*) ;; *) fail "the minute-of-quiet notice must not turn done into waiting (got '$settings')" ;; esac
+[ "$(run_hook Stop "{\"transcript_path\":\"$tmp/whole.jsonl\"}")" = "working" ] && [ "$(opt @claude_stop)" = 1 ] && [ "$(opt @claude_transcript)" = "$tmp/whole.jsonl" ] \
+  || fail "a Stop hook must leave the session working, mark the Stop and keep the transcript"
+end_watch
+# The watch decides once the window is still: done after a Stop hook,
+# stopped without one or when the transcript says the turn was broken off.
+printf '%s\n' '{"parentUuid":"a","type":"user","message":{"role":"user","content":"hi"}}' \
+  '{"parentUuid":"b","type":"user","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user]"}]}}' \
+  '{"parentUuid":"c","type":"system","subtype":"turn_duration"}' '{"type":"last-prompt"}' >"$tmp/broken.jsonl"
+printf '%s\n' '{"parentUuid":"a","type":"user","message":{"role":"user","content":"hi"}}' \
+  '{"parentUuid":"b","type":"assistant","message":{"role":"assistant","content":"hello"}}' '{"type":"last-prompt"}' >"$tmp/whole.jsonl"
+busy; run_hook Stop "{\"transcript_path\":\"$tmp/whole.jsonl\"}" >/dev/null
+sleep 3; busy
+[ "$(opt @claude)" = working ] || fail "a window still changing after a Stop hook must stay working — another Stop hook runs, or Claude was sent back (got '$(opt @claude)')"
+still; sleep 3
+[ "$(opt @claude)" = done ] || fail "a still window after a Stop hook must read as done (got '$(opt @claude)')"
+busy; run_hook Stop "{\"transcript_path\":\"$tmp/broken.jsonl\"}" >/dev/null; still; sleep 3
+[ "$(opt @claude)" = stopped ] || fail "a turn the transcript says was broken off must read as stopped (got '$(opt @claude)')"
+busy; run_hook Stop "{\"transcript_path\":\"$tmp/whole.jsonl\"}" >/dev/null; run_hook PostToolUse '{}' >/dev/null; still; sleep 3
+[ "$(opt @claude)" = stopped ] || fail "a still window with no Stop hook since the last work must read as stopped (got '$(opt @claude)')"
+# One watch at a time, and it ends when the session is no longer working.
+busy; run_hook UserPromptSubmit '{}' >/dev/null; w="$(opt @claude_watch)"; run_hook PostToolUse '{}' >/dev/null
+[ -n "$w" ] && kill -0 "$w" 2>/dev/null && [ "$(opt @claude_watch)" = "$w" ] || fail "a hook must not start a watch where one runs"
+end_watch
+kill -0 "$w" 2>/dev/null && fail "the watch must end once the session is no longer working"
+[ "$(run_hook SessionEnd '{}')" = "unset" ] || fail "claude ending must take the word away"
+[ "$(run_hook SessionStart '{}')" = "done" ] || fail "a conversation resumed must read as done"
+case "$settings" in *'"SessionStart":[{"matcher":"resume"'*) ;; *) fail "only a resumed conversation may start as done (got '$settings')" ;; esac
+rm -f "$FAKE_STATE_LOG"
+out="$(env -u TMUX_PANE PATH="$tmp/statebin:$PATH" sh -c "$(hook_command Stop)" </dev/null 2>&1)" || fail "a hook outside tmux must still succeed"
+[ -z "$out" ] && [ ! -e "$FAKE_STATE_LOG" ] || fail "a hook outside tmux must neither print nor call tmux (got '$out')"
 grep -q -- '^exec bash "$SESSIONS_DIR/' "$tool/scripts/add-session" || fail "add must run the session file through bash, not as a program macOS checks first"
 printf 'SERVER="dev@fake"\n' >"$tool/config"
 ok "add"
@@ -405,8 +502,9 @@ rm -f "$FAKE_TMUX_LOG"
 bash -c ". '$tool/helpers/sessions-dir.sh' && write_session_file notes"
 grep -q -- "^exec" "$tool/sessions/notes" && fail "session file must keep its own name as the command, not exec the helper"
 PATH="$tmp/fakebin:$PATH" bash "$tool/sessions/notes" >/dev/null 2>&1 || fail "a session file must attach"
-grep -q -- "tmux attach -t notes" "$FAKE_TMUX_LOG" || fail "attach must name its session (got '$(cat "$FAKE_TMUX_LOG")')"
-grep -q -- "set-titles-string \"#S\"" "$FAKE_TMUX_LOG" || fail "attach must have tmux title the terminal after the session (got '$(cat "$FAKE_TMUX_LOG")')"
+grep -q -- "tmux -u attach -t notes" "$FAKE_TMUX_LOG" || fail "attach must name its session (got '$(cat "$FAKE_TMUX_LOG")')"
+grep -q -- 'set-titles-string "#S#{?.*@claude.*}"' "$FAKE_TMUX_LOG" || fail "attach must have tmux title the terminal after the session and its state (got '$(cat "$FAKE_TMUX_LOG")')"
+grep -q -- 'status-style "#{?.*@claude.*}"' "$FAKE_TMUX_LOG" || fail "attach must have tmux colour the status line by the session's state (got '$(cat "$FAKE_TMUX_LOG")')"
 ok "attach"
 
 # --- reconnect: a link lost mid-session is attached again; a session the
@@ -424,11 +522,11 @@ chmod +x "$tmp/fakebin/ssh"
 export FAKE_DROPPED="$tmp/dropped" FAKE_SESSION_GONE="$tmp/session-gone"
 rm -f "$FAKE_TMUX_LOG"
 out="$(PATH="$tmp/fakebin:$PATH" bash "$tool/sessions/notes" 2>&1)" || fail "attach must ride out a lost link (got '$out')"
-[ "$(grep -c "tmux attach -t notes" "$FAKE_TMUX_LOG")" = "2" ] || fail "attach must attach again after the link is lost (got '$(cat "$FAKE_TMUX_LOG")')"
+[ "$(grep -c "tmux -u attach -t notes" "$FAKE_TMUX_LOG")" = "2" ] || fail "attach must attach again after the link is lost (got '$(cat "$FAKE_TMUX_LOG")')"
 case "$out" in *"link to dev@fake lost"*"notes"*) ;; *) fail "a lost link must be said, naming the session (got '$out')" ;; esac
 touch "$FAKE_SESSION_GONE"; rm -f "$FAKE_TMUX_LOG"
 PATH="$tmp/fakebin:$PATH" bash "$tool/sessions/notes" >/dev/null 2>&1 && fail "attach must fail when the server has no such session"
-[ "$(grep -c "tmux attach -t notes" "$FAKE_TMUX_LOG")" = "1" ] || fail "a session the server lacks must not be retried (got '$(cat "$FAKE_TMUX_LOG")')"
+[ "$(grep -c "tmux -u attach -t notes" "$FAKE_TMUX_LOG")" = "1" ] || fail "a session the server lacks must not be retried (got '$(cat "$FAKE_TMUX_LOG")')"
 ok "reconnect"
 
 # --- reconnect, away: the wait grows while the link stays lost, and what

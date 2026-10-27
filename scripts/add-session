@@ -10,11 +10,14 @@ root="$(cd "$here/.." && pwd)"
 . "$root/helpers/config.sh"
 . "$root/helpers/remote.sh"
 . "$root/helpers/sessions-dir.sh"
+. "$root/helpers/state.sh"
 
 # What a new session runs. A login shell so the server's own PATH — where a
 # per-user tool like claude lives — is the one in effect, and the session
-# ends when that command does.
-NEW_SESSION_COMMAND='bash -lc claude'
+# ends when that command does. Claude is handed the hooks that say what it
+# is doing; they ride in as an argument of their own, so no shell between
+# here and claude reads into them.
+NEW_SESSION_COMMAND='claude --settings "$1"'
 
 load_config
 wipe
@@ -61,7 +64,7 @@ dir="$resolved"
 # way as from the folder: one path into a session, and the terminal names
 # the tab after the file, that is after the session. -A with -d leaves a
 # session of that name alone should one have started since the check above.
-remote_run "tmux new-session -A -d -s $(printf %q "$name") -c $(printf %q "$dir") $(printf %q "$NEW_SESSION_COMMAND")"
+remote_run "tmux new-session -A -d -s $(printf %q "$name") -c $(printf %q "$dir") bash -lc $(printf %q "$NEW_SESSION_COMMAND") ai-sessions $(printf %q "$(claude_state_settings)")"
 # The folder is brought up to date from the server's listing, so the new
 # session's file takes its place among the others. A listing that does not
 # come, or leaves the session out, still gets it a file under its own name.

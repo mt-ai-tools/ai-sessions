@@ -136,6 +136,23 @@ a file here. A terminal that adds the name of the command a tab runs
 behind its number if the folder is numbered, so a tab too narrow for the
 whole title still ends in the session's name.
 
+After the name, a dot says what the session's Claude is doing: 🔵
+working, 🔴 waiting on you — a question asked, a permission, a plan to
+approve — 🟢 done, and 🟠 stopped, a turn you broke off with escape. So a
+row of tabs shows at a glance which ones want you. tmux's status line, at
+the foot of the window, takes the same colours. No dot means Claude has
+ended there, or was started without the dot. Claude says its state
+itself, through hooks add-session hands it as it starts; they join any
+hooks of your own or a project's, and put nothing in the server's
+settings. When a turn is over, though, no hook can say: another Stop
+hook of yours may run for minutes or send Claude back to work, a message
+sent while it was busy starts with no hook of its own, and escape runs
+none at all. So the screen settles it: while Claude works its spinner
+never rests, and once a working session's screen has been still for five
+seconds, the turn is over — green, or orange when it was broken off.
+Both arrive those few seconds late. A session started before the
+dot, or by hand, shows none until it is started again with add-session.
+
 The sessions folder is as fresh as the last time watch asked. A tmux
 session started elsewhere shows up on the next round; a Claude started
 outside tmux never does. On a server shared with others, the config can name

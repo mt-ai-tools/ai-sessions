@@ -15,6 +15,10 @@
 # and it never got to switch them off. That is put right before the loss
 # is said: see settle_terminal.
 #
+# tmux is told the terminal takes UTF-8 (-u) rather than left to judge by
+# the locale ssh passes on, which it may not: judged wrong, it sends the
+# title's dot as an underscore.
+#
 # Usage: <name>
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -50,7 +54,7 @@ load_config
 while true; do
   status=0
   SECONDS=0
-  remote_terminal "tmux attach -t $(printf %q "$name") $TMUX_TITLE_COMMANDS" || status=$?
+  remote_terminal "tmux -u attach -t $(printf %q "$name") $TMUX_TITLE_COMMANDS" || status=$?
   [ "$status" -eq "$SSH_LINK_LOST" ] || exit "$status"
   settle_terminal
   reconnect_wait "$SECONDS" "session $name goes on there"
