@@ -91,6 +91,12 @@ tmux session under is refused, and nothing is started.
 The tmux name becomes the file's name, so name a tmux session the way you
 want to see it in the folder.
 
+`scripts/add-shell` does the same with your own shell in place of Claude:
+for what you run by hand, a dev server or a one-off command. It is a
+session like the others — it outlives your connection, gets a file in the
+sessions folder, and is attached again after a lost link — only its title
+carries no dot, since no Claude is there to give one.
+
 `scripts/watch-sessions` asks the server which tmux sessions it keeps
 running and writes the sessions folder: one file per tmux session, named
 after it. It keeps asking, on a clock the config can set, until you stop

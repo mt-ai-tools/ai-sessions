@@ -492,6 +492,14 @@ rm -f "$FAKE_STATE_LOG"
 out="$(env -u TMUX_PANE PATH="$tmp/statebin:$PATH" sh -c "$(hook_command Stop)" </dev/null 2>&1)" || fail "a hook outside tmux must still succeed"
 [ -z "$out" ] && [ ! -e "$FAKE_STATE_LOG" ] || fail "a hook outside tmux must neither print nor call tmux (got '$out')"
 grep -q -- '^exec bash "$SESSIONS_DIR/' "$tool/scripts/add-session" || fail "add must run the session file through bash, not as a program macOS checks first"
+# A shell session goes the same way, with tmux handed no command, so it
+# starts the user's own shell and no Claude.
+printf 'SERVER="dev@fake"\n' >"$tool/config"
+rm -f "$FAKE_TMUX_LOG"; rm -rf "$tool/sessions"
+printf 'dev\n~/notes\n' | PATH="$tmp/fakebin:$PATH" bash "$tool/scripts/add-shell" >/dev/null 2>&1 || fail "add-shell must start a session in an existing folder"
+grep -qx -- "tmux new-session -A -d -s dev -c /home/me/notes " "$FAKE_TMUX_LOG" || fail "add-shell must start tmux with no command (got '$(cat "$FAKE_TMUX_LOG")')"
+[ -x "$tool/sessions/dev" ] || fail "add-shell must write the session's file"
+grep -q -- "tmux -u attach -t dev" "$FAKE_TMUX_LOG" || fail "add-shell must attach through the session's file (got '$(cat "$FAKE_TMUX_LOG")')"
 printf 'SERVER="dev@fake"\n' >"$tool/config"
 ok "add"
 
