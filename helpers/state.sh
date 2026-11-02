@@ -22,19 +22,57 @@
 # last work, stopped if not, or if the transcript says it was broken off.
 QUIET_SECONDS=5
 
+# A turn can end while agents it started work on in the background, or
+# while commands those agents started still run. Claude takes up their
+# results when they finish, so the session is working until then, however
+# still its screen. Each Stop hook is told what still runs; commands
+# Claude itself left running, a server say, it is not waiting on, and they
+# do not count. Something killed with no hook to say so would hold the
+# session working for good, so after this many minutes without a Stop
+# hook the screen decides again.
+BACKGROUND_MINUTES=60
+
 # The tmux options, all on the session, never global, so each session
 # shows its own Claude and no other: the word; whether a Stop hook has run
-# since the last work; the transcript, as the Stop hook was told it; and
-# the watch's process, so a hook starts one only where none runs.
+# since the last work; the transcript, as the Stop hook was told it; the
+# watch's process, so a hook starts one only where none runs; the
+# background commands agents started, by id; and when a Stop hook last
+# found background work running, empty when it found none.
 STATE_OPTION='@claude'
 STOP_OPTION='@claude_stop'
 TRANSCRIPT_OPTION='@claude_transcript'
 WATCH_OPTION='@claude_watch'
+SHELLS_OPTION='@claude_agent_shells'
+BACKGROUND_OPTION='@claude_background'
 
 # What every hook starts with: the session Claude runs in, which tmux
 # names in the environment of everything started inside it. Outside tmux
 # there is nothing to tell.
 HOOK_START='[ -n "$TMUX_PANE" ] || exit 0; P="$TMUX_PANE"'
+
+# What Claude hands the hook, in $i, and whether it came from one of its
+# agents rather than Claude itself: an agent's hooks carry its id.
+READ_INPUT='i="$(cat)"'
+FROM_AGENT='printf %s "$i" | grep -Eq '"'"'"agent_id": *"'"'"''
+
+# An agent's tool that left a command running in the background — a shell
+# command, a monitor — names it in its response; the name is kept.
+KEEP_AGENT_SHELL='if '"$FROM_AGENT"'; then
+  x="$(printf %s "$i" | sed -En '"'"'s/.*"(backgroundTaskId|taskId)": *"([^"]*)".*/\2/p'"'"')"
+  [ -z "$x" ] || tmux set-option -t "$P" '"$SHELLS_OPTION"' "$(tmux show-options -v -t "$P" '"$SHELLS_OPTION"' 2>/dev/null) $x" >/dev/null 2>&1
+fi'
+
+# Reads what a Stop hook is told still runs: an agent, or a command an
+# agent started, and the time is stored; nothing, and it is cleared.
+NOTE_BACKGROUND='r="$(printf %s "$i" | grep -o '"'"'"id": *"[^"]*", *"type": *"[^"]*", *"status": *"running"'"'"')"; b=""
+if printf %s "$r" | grep -q '"'"'"type": *"subagent"'"'"'; then b=1; else
+  o=" $(tmux show-options -v -t "$P" '"$SHELLS_OPTION"' 2>/dev/null) "
+  for x in $(printf %s "$r" | grep '"'"'"type": *"shell"'"'"' | sed '"'"'s/^"id": *"\([^"]*\)".*/\1/'"'"'); do
+    case "$o" in *" $x "*) b=1;; esac
+  done
+fi
+if [ -n "$b" ]; then tmux set-option -t "$P" '"$BACKGROUND_OPTION"' "$(date +%s)" >/dev/null 2>&1
+else tmux set-option -u -t "$P" '"$BACKGROUND_OPTION"' >/dev/null 2>&1; fi'
 
 # Stores the word in $s.
 SET_STATE='tmux set-option -t "$P" '"$STATE_OPTION"' "$s" >/dev/null 2>&1'
@@ -50,6 +88,8 @@ WATCH_LOOP='while sleep 2; do
   [ "$(tmux show-options -v -t "$P" '"$STATE_OPTION"' 2>/dev/null)" = working ] || break
   a="$(tmux display-message -p -t "$P" "#{window_activity}" 2>/dev/null)"; [ -n "$a" ] || break
   [ $(($(date +%s) - a)) -ge '"$QUIET_SECONDS"' ] || continue
+  b="$(tmux show-options -v -t "$P" '"$BACKGROUND_OPTION"' 2>/dev/null)"
+  [ -z "$b" ] || [ $(($(date +%s) - b)) -ge $(('"$BACKGROUND_MINUTES"' * 60)) ] || continue
   s=stopped
   if [ "$(tmux show-options -v -t "$P" '"$STOP_OPTION"' 2>/dev/null)" = 1 ]; then
     s=done; t="$(tmux show-options -v -t "$P" '"$TRANSCRIPT_OPTION"' 2>/dev/null)"
@@ -69,16 +109,27 @@ if [ -z "$w" ] || ! kill -0 "$w" 2>/dev/null; then
 fi'
 
 # Work: the word, a Stop hook no longer the last thing seen, and the watch.
-WORK="$HOOK_START"'
-s=working; '"$SET_STATE"'
-tmux set-option -t "$P" '"$STOP_OPTION"' 0 >/dev/null 2>&1
+# An agent's work leaves the Stop hook be: Claude's own turn ended all the
+# same, and what the agents do holds the session working only as long as
+# it runs.
+WORK_BODY='s=working; '"$SET_STATE"'
+'"$FROM_AGENT"' || tmux set-option -t "$P" '"$STOP_OPTION"' 0 >/dev/null 2>&1
 '"$ENSURE_WATCH"'
 exit 0'
+WORK="$HOOK_START"'; '"$READ_INPUT"'
+'"$WORK_BODY"
+
+# A tool done: work, and a command an agent left running is kept.
+TOOL_DONE="$HOOK_START"'; '"$READ_INPUT"'
+'"$KEEP_AGENT_SHELL"'
+'"$WORK_BODY"
+
 
 # A Stop hook: the turn may be ending, which the watch will tell. Until
 # then the session stays working.
-STOP="$HOOK_START"'
-t="$(sed -n '"'"'s/.*"transcript_path": *"\([^"]*\)".*/\1/p'"'"')"
+STOP="$HOOK_START"'; '"$READ_INPUT"'
+t="$(printf %s "$i" | sed -n '"'"'s/.*"transcript_path": *"\([^"]*\)".*/\1/p'"'"')"
+'"$NOTE_BACKGROUND"'
 s=working; '"$SET_STATE"'
 tmux set-option -t "$P" '"$STOP_OPTION"' 1 \; set-option -t "$P" '"$TRANSCRIPT_OPTION"' "$t" >/dev/null 2>&1
 '"$ENSURE_WATCH"'
@@ -87,19 +138,25 @@ exit 0'
 # A tool about to run is work, unless the tool is itself a question to
 # you — a question asked, a plan put up for approval: the hook sees the
 # tool's name in what Claude hands it.
-TOOL="$HOOK_START"'
-if grep -Eq '"'"'"tool_name": *"(AskUserQuestion|ExitPlanMode)"'"'"'; then s=waiting; '"$SET_STATE"'; exit 0; fi
-'"${WORK#"$HOOK_START"}"
+TOOL="$HOOK_START"'; '"$READ_INPUT"'
+if printf %s "$i" | grep -Eq '"'"'"tool_name": *"(AskUserQuestion|ExitPlanMode)"'"'"'; then s=waiting; '"$SET_STATE"'; exit 0; fi
+'"$WORK_BODY"
+
+# An agent stopping is told what still runs, as a Stop hook is; it changes
+# nothing else, since Claude takes up what the agent did after.
+AGENT_STOP="$HOOK_START"'; '"$READ_INPUT"'
+'"$NOTE_BACKGROUND"'
+exit 0'
 
 # A permission asked, or a dialog put up: waiting on you.
 WAIT="$HOOK_START"'; s=waiting; '"$SET_STATE"'; exit 0'
 
 # A conversation resumed is done until you write: its last turn ended
 # before it was resumed.
-RESUMED="$HOOK_START"'; s=done; '"$SET_STATE"'; exit 0'
+RESUMED="$HOOK_START"'; tmux set-option -u -t "$P" '"$BACKGROUND_OPTION"' \; set-option -u -t "$P" '"$SHELLS_OPTION"' >/dev/null 2>&1; s=done; '"$SET_STATE"'; exit 0'
 
 # Claude ending: the word is taken away, the watch with it.
-END="$HOOK_START"'; tmux set-option -u -t "$P" '"$STATE_OPTION"' >/dev/null 2>&1; exit 0'
+END="$HOOK_START"'; tmux set-option -u -t "$P" '"$STATE_OPTION"' \; set-option -u -t "$P" '"$BACKGROUND_OPTION"' \; set-option -u -t "$P" '"$SHELLS_OPTION"' >/dev/null 2>&1; exit 0'
 
 # A string as JSON has it, newlines included.
 json_string() {
@@ -120,12 +177,13 @@ hook_entry() {
 # minute of quiet is left out of the notifications, so a finished turn
 # stays done.
 claude_state_settings() {
-  printf '{"hooks":{%s,%s,%s,%s,%s,%s,%s}}' \
+  printf '{"hooks":{%s,%s,%s,%s,%s,%s,%s,%s}}' \
     "$(hook_entry UserPromptSubmit "$WORK")" \
     "$(hook_entry PreToolUse "$TOOL")" \
-    "$(hook_entry PostToolUse "$WORK")" \
+    "$(hook_entry PostToolUse "$TOOL_DONE")" \
     "$(hook_entry Notification "$WAIT" 'permission_prompt|elicitation_dialog')" \
     "$(hook_entry Stop "$STOP")" \
+    "$(hook_entry SubagentStop "$AGENT_STOP")" \
     "$(hook_entry SessionStart "$RESUMED" resume)" \
     "$(hook_entry SessionEnd "$END")"
 }
