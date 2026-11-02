@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# Starts again the Claude sessions the server lost when it went down: a
+# reboot, a power cut. tmux does not outlive one, but Claude leaves a
+# record of every Claude it was running, with the tmux name it ran under
+# and the folder; restore-plan.py reads those on the server and says which
+# to bring back. Each comes back under its own tmux name, in its folder,
+# resuming its own conversation, with the dot in its title, and in the
+# order the sessions were first started, so the numbered files keep their
+# places. Then the sessions folder is rewritten, and on macOS each restored
+# session's file is opened in Terminal again.
+#
+# What it would start is shown first and asked about; nothing starts
+# without a yes. Run more than once, it starts only what is still missing:
+# a session tmux runs already is left alone. A server that froze rather
+# than rebooted still has its sessions, and this finds nothing to do.
+#
+# Usage: restore-sessions [--yes] [--no-open]
+#   --yes      start without asking
+#   --no-open  do not open the restored sessions' files in Terminal
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root="$(cd "$here/.." && pwd)"
+. "$root/helpers/config.sh"
+. "$root/helpers/remote.sh"
+. "$root/helpers/sessions-dir.sh"
+. "$root/helpers/state.sh"
+
+# What each restored session runs: claude resuming its conversation, from
+# a login shell for the server's PATH, with the hooks that give the title
+# its dot — the same as add-claude, so a restored session is no different
+# from a new one. Settings and session id ride in as arguments of their own.
+RESTORE_COMMAND='claude --settings "$1" --resume "$2"'
+
+# Seconds between two starts. tmux dates a session to the second, and the
+# folder is numbered by that date; two started in one second would be
+# ordered by name, not by when they first began.
+START_GAP=1.1
+
+assume_yes=0 open_files=1
+for arg in "$@"; do
+  case "$arg" in
+    --yes) assume_yes=1 ;;
+    --no-open) open_files=0 ;;
+    *) echo "usage: restore-sessions [--yes] [--no-open]" >&2; exit 1 ;;
+  esac
+done
+
+load_config
+export SERVER TMUX_SESSIONS="${TMUX_SESSIONS:-}" TAILSCALE_NODE="${TAILSCALE_NODE:-}" NUMBER_SESSIONS="${NUMBER_SESSIONS:-}"
+tab=$'\t'
+
+# --- the plan, from the server
+status=0
+plan="$(remote_run "python3 -" <"$root/helpers/restore-plan.py")" || status=$?
+if [ "$status" -eq "$SSH_LINK_LOST" ]; then
+  echo "ai-sessions: could not reach $SERVER — a server just restarted can take minutes before ssh answers" >&2
+  exit 1
+elif [ "$status" -ne 0 ]; then
+  echo "ai-sessions: could not read the session records on $SERVER (python3 there said so above)" >&2
+  exit 1
+fi
+
+restores="$(printf '%s\n' "$plan" | grep "^restore$tab" || true)"
+skips="$(printf '%s\n' "$plan" | grep "^skip$tab" || true)"
+
+started_at() { date -r "$(($1 / 1000))" '+%m-%d %H:%M' 2>/dev/null || date -d "@$(($1 / 1000))" '+%m-%d %H:%M'; }
+
+if [ -n "$skips" ]; then
+  echo "left as they are:"
+  while IFS="$tab" read -r _ ms name why; do
+    printf '  %-24s %s\n' "$name" "$why"
+  done <<<"$skips"
+  echo
+fi
+if [ -z "$restores" ]; then
+  echo "nothing to restore on $SERVER"
+  exit 0
+fi
+count="$(printf '%s\n' "$restores" | wc -l | tr -d ' ')"
+echo "to restore on $SERVER, in this order:"
+while IFS="$tab" read -r _ ms name dir sid; do
+  printf '  %-24s started %s   %s\n' "$name" "$(started_at "$ms")" "$dir"
+done <<<"$restores"
+echo
+
+if [ "$assume_yes" -ne 1 ]; then
+  read -r -p "start these $count sessions? (yes/no): " answer || answer=""
+  [ "$answer" = "yes" ] || { echo "ai-sessions: nothing started"; exit 1; }
+fi
+
+# --- the starts, in one go: the whole batch is written here as one script
+# and run there by one ssh, so a lost link cannot leave half of it said.
+# Each start is checked against tmux once more right before, in case a
+# session by that name came up meanwhile.
+settings="$(claude_state_settings)"
+batch=""
+while IFS="$tab" read -r _ ms name dir sid; do
+  qname="$(printf %q "$name")"
+  batch+="if tmux has-session -t $(printf %q "=$name") 2>/dev/null; then echo \"already running: \"$qname;"
+  batch+=" elif tmux new-session -d -s $qname -c $(printf %q "$dir") bash -lc $(printf %q "$RESTORE_COMMAND") ai-sessions $(printf %q "$settings") $(printf %q "$sid");"
+  batch+=" then echo \"started: \"$qname; sleep $START_GAP; else echo \"FAILED: \"$qname; fi"$'\n'
+done <<<"$restores"
+out="$(remote_run "bash -s" <<<"$batch")" || true
+printf '%s\n' "$out" | sed 's/^/  /'
+started="$(printf '%s\n' "$out" | grep -c '^started: ' || true)"
+echo
+
+# --- the folder, numbered again, and the windows
+bash "$root/helpers/refresh.sh" >/dev/null || echo "ai-sessions: the sessions folder could not be refreshed; watch-sessions will on its next round" >&2
+
+if [ "$open_files" -eq 1 ] && [ "$(uname)" = "Darwin" ]; then
+  while IFS="$tab" read -r _ ms name dir sid; do
+    for file in "$SESSIONS_DIR/$name$SESSION_FILE_SUFFIX" "$SESSIONS_DIR"/[0-9][0-9][0-9]" $name$SESSION_FILE_SUFFIX"; do
+      [ -x "$file" ] && open -a Terminal "$file" && break
+    done
+  done <<<"$restores"
+fi
+echo "done: $started of $count sessions started on $SERVER"
+[ "$started" -eq "$count" ]

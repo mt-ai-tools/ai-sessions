@@ -620,4 +620,78 @@ case "$out" in *"FAIL:  tmux is not on the server"*) ;; *) fail "missing tmux mu
 rm -f "$FAKE_NO_TMUX"
 ok "run-check"
 
+# --- restore: after a reboot, the Claude records left on the server bring
+# back the sessions that were running, oldest first, each under its own
+# tmux name resuming its own conversation; every record that must not
+# come back is left and said why. The server here is this machine: a fake
+# ssh runs the command with a home of its own and a fake tmux that keeps
+# its sessions in a file.
+srv="$tmp/server"
+mkdir -p "$srv/home/.claude/sessions" "$srv/home/.claude/projects/-w" "$srv/home/w" "$srv/bin"
+cat >"$srv/bin/tmux" <<'EOR'
+#!/usr/bin/env bash
+# list-sessions, has-session, new-session and list-panes, from one file.
+f="$FAKE_SRV/tmux-sessions"; touch "$f"
+case "$1" in
+  list-sessions) cut -f1 "$f" ;;
+  has-session) grep -q "^${3#=}$(printf '\t')" "$f" ;;
+  new-session) shift; name="" dir=""
+    while [ $# -gt 0 ]; do case "$1" in -d) shift ;; -s) name="$2"; shift 2 ;; -c) dir="$2"; shift 2 ;; *) break ;; esac; done
+    printf '%s\t%s\tclaude\t0\t%s\n' "$name" "$dir" "$(date +%s)" >>"$f"
+    printf '%s\n' "$@" >"$FAKE_SRV/cmd-$name" ;;
+  list-panes) cat "$f" ;;
+esac
+EOR
+cat >"$srv/bin/ssh" <<'EOR'
+#!/usr/bin/env bash
+# The last argument is the command; it runs here, as the server's user.
+cmd="${@: -1}"
+HOME="$FAKE_SRV/home" PATH="$FAKE_SRV/bin:$PATH" bash -c "$cmd"
+EOR
+chmod +x "$srv/bin/tmux" "$srv/bin/ssh"
+export FAKE_SRV="$srv"
+# A record as Claude writes it: started in a boot at $boot, $ticks clock
+# ticks into it. The clock ticks at whatever rate this machine says.
+hz="$(getconf CLK_TCK)"
+record() { # pid name-or-empty folder session-id started-seconds boot-seconds
+  local tmuxfield=""
+  [ -z "$2" ] || tmuxfield=",\"tmux\":\"$2:@1.%1\""
+  printf '{"pid":%s,"sessionId":"%s","cwd":"%s","startedAt":%s000,"procStart":"%s"%s}\n' \
+    "$1" "$4" "$3" "$5" "$(( ($5 - $6) * hz ))" "$tmuxfield" >"$srv/home/.claude/sessions/$1.json"
+  touch "$srv/home/.claude/projects/-w/$4.jsonl"
+}
+lastboot=1790000000 w="$srv/home/w"
+record 900002 "it's two" "$w" s-two $((lastboot + 600)) $lastboot
+record 900001 "one" "$w" s-one $((lastboot + 300)) $lastboot
+record 900003 "older" "$w" s-older $((lastboot - 86400 + 60)) $((lastboot - 86400))
+record 900004 "" "$w" s-bare $((lastboot + 700)) $lastboot
+record 900005 "moved" "$srv/home/gone" s-moved $((lastboot + 800)) $lastboot
+record 900006 "running" "$w" s-running $((lastboot + 900)) $lastboot
+record 900007 "one" "$w" s-one-again $((lastboot + 100)) $lastboot
+record 900008 "untold" "$w" s-untold $((lastboot + 950)) $lastboot
+rm "$srv/home/.claude/projects/-w/s-untold.jsonl"
+printf 'running\t%s\tclaude\t0\t1\n' "$w" >"$srv/tmux-sessions"
+printf 'SERVER="dev@fake"\nNUMBER_SESSIONS="true"\n' >"$tool/config"
+rm -f "$tool/sessions/"*
+out="$(PATH="$srv/bin:$PATH" bash "$tool/scripts/restore-sessions" --no-open </dev/null 2>&1)" && fail "restore must not start without a yes"
+case "$out" in *"nothing started"*) ;; *) fail "restore without a yes must say nothing started (got '$out')" ;; esac
+[ "$(wc -l <"$srv/tmux-sessions")" -eq 1 ] || fail "restore without a yes must start nothing"
+out="$(PATH="$srv/bin:$PATH" bash "$tool/scripts/restore-sessions" --yes --no-open 2>&1)" || fail "restore must succeed (got '$out')"
+case "$out" in *"older"*"from an earlier boot"*) ;; *) fail "a record from an earlier boot must be left (got '$out')" ;; esac
+case "$out" in *"ran outside tmux"*) ;; *) fail "a record outside tmux must be left (got '$out')" ;; esac
+case "$out" in *"moved"*"is gone"*) ;; *) fail "a record whose folder is gone must be left (got '$out')" ;; esac
+case "$out" in *"running"*"already runs"*) ;; *) fail "a session tmux runs must be left (got '$out')" ;; esac
+case "$out" in *"untold"*"no transcript"*) ;; *) fail "a session without a transcript must be left (got '$out')" ;; esac
+case "$out" in *"one"*"same name"*) ;; *) fail "an earlier record under a name taken later must be left (got '$out')" ;; esac
+case "$out" in *"done: 2 of 2"*) ;; *) fail "restore must say how many started (got '$out')" ;; esac
+[ "$(cut -f1 "$srv/tmux-sessions" | tr '\n' '|')" = "running|one|it's two|" ] || fail "restore must start the sessions oldest first (got '$(cut -f1 "$srv/tmux-sessions")')"
+[ "$(tail -n 1 "$srv/cmd-it's two")" = "s-two" ] || fail "a restored session must resume its own conversation"
+grep -q -- "--resume" "$srv/cmd-one" && grep -q "s-one" "$srv/cmd-one" && ! grep -q "s-one-again" "$srv/cmd-one" || fail "of two records under one name the later must win"
+grep -q '"hooks"' "$srv/cmd-one" || fail "a restored session must be handed the hooks, as add-claude does"
+[ -x "$tool/sessions/002 one" ] && [ -x "$tool/sessions/003 it's two" ] || fail "restore must number the folder again (got '$(ls "$tool/sessions")')"
+out="$(PATH="$srv/bin:$PATH" bash "$tool/scripts/restore-sessions" --yes --no-open 2>&1)" || fail "a second restore must succeed (got '$out')"
+case "$out" in *"nothing to restore"*) ;; *) fail "a second restore must find nothing to do (got '$out')" ;; esac
+unset FAKE_SRV
+ok "restore"
+
 echo "all checks passed"

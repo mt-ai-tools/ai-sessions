@@ -24,6 +24,7 @@ Any machine you can reach over SSH, wherever it is hosted. It needs:
 - tmux (`apt install tmux`, or your platform's equivalent). Every session
   lives inside tmux; that is what lets it outlive your connection.
 - Claude Code, installed for the login user and signed in.
+- python3, for `restore-sessions` only; most distributions ship it.
 - An address that does not change. Which one depends on where you work
   from — the next section.
 
@@ -164,6 +165,32 @@ The sessions folder is as fresh as the last time watch asked. A tmux
 session started elsewhere shows up on the next round; a Claude started
 outside tmux never does. On a server shared with others, the config can name
 the tmux sessions to show; left empty, every tmux session is shown.
+
+## After the server restarts
+
+tmux does not outlive a reboot or a power cut: every session is gone, and
+the watch window says no tmux sessions run. Claude, though, leaves a
+record of each Claude it was running, with the tmux name and the folder.
+
+```sh
+scripts/restore-sessions
+```
+
+reads those records on the server and shows which sessions it would
+bring back, and which it leaves and why: a Claude that still runs, a
+record from an earlier boot, a folder that is gone, a conversation with
+no transcript to resume. Type `yes` and each comes back under its own
+tmux name, in its folder, resuming its own conversation, with its dot, in
+the order the sessions were first started, so the numbered files keep
+their places. The sessions folder is then rewritten and, on macOS, each
+restored session's file is opened in Terminal again. `--yes` skips the
+question, `--no-open` the windows.
+
+Run it again and it starts only what is still missing; a server that
+froze rather than rebooted keeps its sessions, and it finds nothing to do.
+Sessions started with `add-shell` are not brought back: nothing records
+them. The records are Claude Code's own and undocumented, so a later
+Claude may change them; a record that does not read is skipped and said.
 
 ## Before a trip
 
