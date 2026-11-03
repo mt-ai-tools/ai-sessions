@@ -37,8 +37,7 @@ while true; do
     exit 1
   fi
   status=0
-  SECONDS=0
-  remote_forward "$port" || status=$?
+  reconnect_reach remote_forward "$port" reconnect_back || status=$?
   [ "$status" -eq "$SSH_LINK_LOST" ] || exit "$status"
-  reconnect_wait "$SECONDS" "port $port comes back with it"
+  reconnect_wait "port $port comes back with it"
 done

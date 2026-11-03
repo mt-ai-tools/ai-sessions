@@ -53,9 +53,8 @@ name="${1:?attach.sh <name>}"
 load_config
 while true; do
   status=0
-  SECONDS=0
-  remote_terminal "tmux -u attach -t $(printf %q "$name") $TMUX_TITLE_COMMANDS" || status=$?
+  reconnect_reach remote_terminal "tmux -u attach -t $(printf %q "$name") $TMUX_TITLE_COMMANDS" || status=$?
   [ "$status" -eq "$SSH_LINK_LOST" ] || exit "$status"
   settle_terminal
-  reconnect_wait "$SECONDS" "session $name goes on there"
+  reconnect_wait "session $name goes on there"
 done

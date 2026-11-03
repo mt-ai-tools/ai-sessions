@@ -45,8 +45,9 @@ cat >"$tmp/argbin/ssh" <<'EOR'
 printf '%s\n' "$@" >"$FAKE_ARGS"
 if [ -f "$FAKE_DROPS_LEFT" ]; then
   n="$(cat "$FAKE_DROPS_LEFT")"
-  [ "$n" -gt 0 ] && { printf '%s' "$((n - 1))" >"$FAKE_DROPS_LEFT"; exit 255; }
+  [ "$n" -gt 0 ] && { printf '%s' "$((n - 1))" >"$FAKE_DROPS_LEFT"; echo "ssh: connect to host fake port 22: Operation timed out" >&2; exit 255; }
 fi
+for a in "$@"; do case "$a" in LocalCommand=*) eval "${a#LocalCommand=}" ;; esac; done
 case "${*: -1}" in *"echo up"*) echo up ;; esac
 exit 0
 EOR
@@ -66,7 +67,9 @@ out="$(PATH="$tmp/argbin:$PATH" bash "$tool/scripts/forward-port" 70000 2>&1)" &
 case "$out" in *"'70000' is not a port"*) ;; *) fail "a refused port must be named (got '$out')" ;; esac
 printf '2' >"$FAKE_DROPS_LEFT"
 out="$(PATH="$tmp/argbin:$PATH" bash "$tool/scripts/forward-port" 3000 2>&1)" || fail "a forward must ride out a lost link (got '$out')"
-case "$out" in *"link to dev@fake lost, port 3000 comes back with it"*"reconnecting in 3s"*"reconnecting in 6s"*"localhost:3000 here"*) ;; *) fail "a lost link must be said, waited out with a growing wait, and the port brought back (got '$out')" ;; esac
+case "$out" in *"link to dev@fake lost — port 3000 comes back with it"*"trying again in 3s"*"try 1 failed: ssh: connect to host fake"*"trying again in 6s"*"link to dev@fake back after"*"localhost:3000 here"*) ;; *) fail "a lost link must be said, waited out with a growing wait, each failed try said under it, and the port brought back (got '$out')" ;; esac
+[ "$(printf '%s\n' "$out" | grep -c "lost —")" = "1" ] || fail "one outage must be said once, however many tries it takes (got '$out')"
+grep -q -- "LocalCommand=touch" "$FAKE_ARGS" || fail "a forward must mark when its link is made (got '$(tr '\n' ' ' <"$FAKE_ARGS")')"
 PATH="$tmp/argbin:$PATH" bash -c ". '$root/helpers/remote.sh' && SERVER=dev@fake && remote_terminal true"
 grep -q -- "localhost:" "$FAKE_ARGS" && fail "the session path must carry no forward (got '$(tr '\n' ' ' <"$FAKE_ARGS")')"
 PATH="$tmp/argbin:$PATH" bash -c ". '$root/helpers/remote.sh' && SERVER=dev@fake && remote_run true"
@@ -552,13 +555,13 @@ chmod +x "$tmp/fakebin/ssh"
 rm -f "$FAKE_DROPPED" "$FAKE_SESSION_GONE"
 printf 'SERVER="dev@fake"\nTAILSCALE_NODE="sleeper"\n' >"$tool/config"
 out="$(PATH="$tmp/fakebin:$tmp/tsbin:$PATH" bash "$tool/sessions/notes" 2>&1)" && fail "the session gone after two drops must still end the attach"
-case "$out" in *"reconnecting in 3s"*"reconnecting in 6s"*) ;; *) fail "the wait must grow while the link stays lost (got '$out')" ;; esac
+case "$out" in *"trying again in 3s"*"try 1 failed"*"trying again in 6s"*) ;; *) fail "the wait must grow while the link stays lost (got '$out')" ;; esac
 [ "$(printf '%s\n' "$out" | grep -c "offline in the tailnet")" = "2" ] || fail "what tailscale knows must be said with each wait (got '$out')"
 rm -f "$FAKE_DROPPED" "$FAKE_SESSION_GONE"
 printf 'SERVER="dev@fake"\n' >"$tool/config"
 out="$(PATH="$tmp/fakebin:$tmp/tsbin:$PATH" bash "$tool/sessions/notes" 2>&1)" || true
 case "$out" in *tailnet*) fail "without TAILSCALE_NODE nothing about tailscale must be said (got '$out')" ;; esac
-case "$out" in *"reconnecting in 3s"*) ;; *) fail "the plain lost-link message must stay (got '$out')" ;; esac
+case "$out" in *"lost — session notes goes on there, ctrl-c to stop"*"  trying again in 3s"*) ;; *) fail "the plain lost-link message must stay (got '$out')" ;; esac
 ok "reconnect away"
 
 # --- reconnect, terminal: a link lost mid-session leaves the terminal as

@@ -17,6 +17,10 @@ SSH_CONNECT=(-o ConnectTimeout=10)
 # the way. Any other status was handed back by the command run there.
 SSH_LINK_LOST=255
 
+# More options for the ssh of a link that is kept, SSH_REACH, are set by
+# reconnect.sh to mark when the link is made; where that is not sourced
+# they are unset and the links below go without.
+
 # Runs a command on the server and returns its output. No terminal: for
 # listings and checks. The server's login banner is informational and
 # would land in every listing, so only errors are let through here; the
@@ -60,7 +64,7 @@ make_remote_dir() {
 # session, which needs a terminal on both ends. Nothing else rides on this
 # link: a port is brought over by a link of its own, below.
 remote_terminal() {
-  ssh -t "${SSH_KEEPALIVE[@]}" "${SSH_CONNECT[@]}" "$SERVER" "$@"
+  ssh -t "${SSH_KEEPALIVE[@]}" "${SSH_CONNECT[@]}" ${SSH_REACH[@]+"${SSH_REACH[@]}"} "$SERVER" "$@"
 }
 
 # Whether a string is a port number.
@@ -82,9 +86,11 @@ port_in_use() {
 # means the port is. Then the link is held by waiting on the server for
 # as long as it lasts. Returns ssh's own status: 255 when the link could
 # not be made or was lost, at once when the port could not be set up.
+# Takes a command to run as the port comes up, before that is said: the
+# caller's word that the link is back.
 remote_forward() {
-  local port="$1"
-  ssh -o LogLevel=ERROR "${SSH_KEEPALIVE[@]}" "${SSH_CONNECT[@]}" -o ExitOnForwardFailure=yes \
+  local port="$1" on_up="${2:-true}"
+  ssh -o LogLevel=ERROR "${SSH_KEEPALIVE[@]}" "${SSH_CONNECT[@]}" ${SSH_REACH[@]+"${SSH_REACH[@]}"} -o ExitOnForwardFailure=yes \
     -L "$port:localhost:$port" "$SERVER" 'echo up; while :; do sleep 3600; done' \
-    | { IFS= read -r _ && echo "port $port on the server is localhost:$port here — close this window to let it go"; cat >/dev/null; }
+    | { IFS= read -r _ && "$on_up" && echo "port $port on the server is localhost:$port here — close this window to let it go"; cat >/dev/null; }
 }

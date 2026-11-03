@@ -119,7 +119,10 @@ A closed lid, or any sleep, loses the link to the server but not the
 session. The window says so and attaches again as soon as the server
 answers, so it is back in the session moments after the lid opens, without
 a hand. Only a window closed on purpose, or ctrl-c while it waits, ends it.
-A link that stays lost is tried less and less often, and when the config
+The loss is said once, and each try after it is a line under it ending in
+what ssh said when it failed, so one outage reads as one block; a
+forwarded port's window also says when the link is back and how long it
+was gone. A link that stays lost is tried less and less often, and when the config
 names the server in Tailscale, each try says what Tailscale knows:
 Tailscale is off on this machine, the server is offline, its key has run
 out, or this machine has lost its route into the tailnet — Tailscale up on
