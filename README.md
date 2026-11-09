@@ -163,9 +163,9 @@ never rests, and once a working session's screen has been still for five
 seconds, the turn is over — green, or orange when it was broken off.
 Both arrive those few seconds late. A turn that ends while agents it
 started work on in the background, or while commands those agents
-started still run, stays blue until they finish and Claude has taken up
-what they did; a command Claude itself left running, such as a server,
-does not hold it. A session started before the
+started still run, stays blue until they finish, however long that
+takes, and Claude has taken up what they did; a command Claude itself
+left running, such as a server, does not hold it. A session started before the
 dot, or by hand, shows none until it is started again with add-claude.
 
 The sessions folder is as fresh as the last time watch asked. A tmux

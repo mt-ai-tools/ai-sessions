@@ -27,10 +27,14 @@ QUIET_SECONDS=5
 # results when they finish, so the session is working until then, however
 # still its screen. Each Stop hook is told what still runs; commands
 # Claude itself left running, a server say, it is not waiting on, and they
-# do not count. Something killed with no hook to say so would hold the
-# session working for good, so after this many minutes without a Stop
-# hook the screen decides again.
-BACKGROUND_MINUTES=60
+# do not count. Whether it all still runs is then asked of the thing
+# itself, not of a clock, since a command may rightly run for hours: an
+# agent's command runs for as long as a process holds its output file
+# open, and an agent for as long as its transcript keeps being written —
+# at least once in this many minutes, since a command it waits on is cut
+# off after ten. Something killed with no hook to say so thus lets go of
+# the session as soon as it is gone.
+AGENT_QUIET_MINUTES=15
 
 # The tmux options, all on the session, never global, so each session
 # shows its own Claude and no other: the word; whether a Stop hook has run
@@ -82,6 +86,21 @@ SET_STATE='tmux set-option -t "$P" '"$STATE_OPTION"' "$s" >/dev/null 2>&1'
 # message in the transcript is bookkeeping, and is passed over.
 INTERRUPTED_TEST='tail -n 30 "$t" 2>/dev/null | grep '"'"'^{"parentUuid"'"'"' | grep -v '"'"'"type":"system"'"'"' | tail -n 1 | grep -qF "[Request interrupted by user"'
 
+# Whether background work the last Stop hook found still runs: a command
+# an agent started, its output file, tasks/<id>.output, still open in
+# Claude or a process under it; or an agent whose transcript, beside the
+# session's own, was written lately. Linux names a process's open files
+# under /proc; elsewhere lsof does.
+BACKGROUND_TEST='{ x="$(tmux show-options -v -t "$P" '"$SHELLS_OPTION"' 2>/dev/null)"; h=""
+  if [ -n "$x" ]; then
+    q="$(tmux display-message -p -t "$P" "#{pane_pid}" 2>/dev/null)"; k="$q"
+    for n in 1 2 3; do q="$(for c in $q; do pgrep -P "$c"; done 2>/dev/null)"; k="$k $q"; done
+    o="$(for c in $k; do ls -l "/proc/$c/fd" 2>/dev/null || lsof -Fn -p "$c" 2>/dev/null; done)"
+    for c in $x; do case "$o" in *"/$c.output"*) h=1;; esac; done
+  fi
+  [ -n "$h" ] || { t="$(tmux show-options -v -t "$P" '"$TRANSCRIPT_OPTION"' 2>/dev/null)"
+    [ -n "$t" ] && [ -n "$(find "${t%.jsonl}/subagents" -name "*.jsonl" -mmin -'"$AGENT_QUIET_MINUTES"' 2>/dev/null | head -n 1)" ]; }; }'
+
 # The watch, every two seconds for as long as the session is working. It
 # ends by itself the moment the session is anything else, or gone.
 WATCH_LOOP='while sleep 2; do
@@ -89,7 +108,7 @@ WATCH_LOOP='while sleep 2; do
   a="$(tmux display-message -p -t "$P" "#{window_activity}" 2>/dev/null)"; [ -n "$a" ] || break
   [ $(($(date +%s) - a)) -ge '"$QUIET_SECONDS"' ] || continue
   b="$(tmux show-options -v -t "$P" '"$BACKGROUND_OPTION"' 2>/dev/null)"
-  [ -z "$b" ] || [ $(($(date +%s) - b)) -ge $(('"$BACKGROUND_MINUTES"' * 60)) ] || continue
+  if [ -n "$b" ]; then '"$BACKGROUND_TEST"' && continue; fi
   s=stopped
   if [ "$(tmux show-options -v -t "$P" '"$STOP_OPTION"' 2>/dev/null)" = 1 ]; then
     s=done; t="$(tmux show-options -v -t "$P" '"$TRANSCRIPT_OPTION"' 2>/dev/null)"
