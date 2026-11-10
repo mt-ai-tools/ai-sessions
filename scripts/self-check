@@ -674,8 +674,10 @@ esac
 EOR
 cat >"$srv/bin/ssh" <<'EOR'
 #!/usr/bin/env bash
-# The last argument is the command; it runs here, as the server's user.
+# The last argument is the command; it runs here, as the server's user,
+# in the server's home, as ssh starts it.
 cmd="${@: -1}"
+cd "$FAKE_SRV/home"
 HOME="$FAKE_SRV/home" PATH="$FAKE_SRV/bin:$PATH" bash -c "$cmd"
 EOR
 chmod +x "$srv/bin/tmux" "$srv/bin/ssh"
@@ -723,5 +725,46 @@ out="$(PATH="$srv/bin:$PATH" bash "$tool/scripts/restore-sessions" --yes --no-op
 case "$out" in *"nothing to restore"*) ;; *) fail "a second restore must find nothing to do (got '$out')" ;; esac
 unset FAKE_SRV
 ok "restore"
+
+# --- tunnels: files are carried between this machine and a folder on the
+# server, through the same fake server as restore: its ssh runs the
+# command here, with a home of its own, and passes the stream through.
+export FAKE_SRV="$srv"
+printf 'SERVER="dev@fake"\n' >"$tool/config"
+home="$srv/home"
+mkdir -p "$home/out/sub"
+printf 'a\n' >"$home/out/one file"; printf 'b\n' >"$home/out/sub/two"; printf 'x\n' >"$home/out/.DS_Store"
+out="$(printf 'out\nc' | PATH="$srv/bin:$PATH" bash "$tool/scripts/receive-files" 2>&1)" || fail "receive must copy (got '$out')"
+[ "$(cat "$tool/tunnels/from-server/one file")" = "a" ] && [ "$(cat "$tool/tunnels/from-server/sub/two")" = "b" ] || fail "receive must bring the folder's files, nested ones too"
+[ -e "$tool/tunnels/from-server/.DS_Store" ] && fail "receive must leave Finder's file behind"
+[ -e "$home/out/one file" ] || fail "a copy must leave the server's files"
+rm -rf "$tool/tunnels/from-server/"*
+out="$(printf 'out\nM' | PATH="$srv/bin:$PATH" bash "$tool/scripts/receive-files" 2>&1)" || fail "receive must move (got '$out')"
+[ -e "$tool/tunnels/from-server/sub/two" ] || fail "a move must bring the files"
+[ -e "$home/out/one file" ] || [ -e "$home/out/sub" ] && fail "a move must empty the server's folder"
+[ -d "$home/out" ] || fail "a move must leave the server's folder itself"
+out="$(printf 'out\nc' | PATH="$srv/bin:$PATH" bash "$tool/scripts/receive-files" 2>&1)" || fail "an empty folder must not fail (got '$out')"
+case "$out" in *"nothing to bring"*) ;; *) fail "an empty folder must say nothing to bring (got '$out')" ;; esac
+out="$(printf 'nope\nc' | PATH="$srv/bin:$PATH" bash "$tool/scripts/receive-files" 2>&1)" && fail "receive must refuse a missing folder"
+printf 'z\n' >"$home/z"
+out="$(printf '~\nm' | PATH="$srv/bin:$PATH" bash "$tool/scripts/receive-files" 2>&1)" && fail "receive must refuse to move out of home"
+[ -e "$home/z" ] || fail "a refused move must leave home as it was"
+printf 'a\n' >"$home/out/f"
+out="$(printf 'out\nx' | PATH="$srv/bin:$PATH" bash "$tool/scripts/receive-files" 2>&1)" && fail "a key other than C or M must carry nothing"
+out="$(PATH="$srv/bin:$PATH" bash "$tool/scripts/send-files" </dev/null 2>&1)" || fail "an empty to-server must not fail (got '$out')"
+case "$out" in *"nothing to send"*) ;; *) fail "an empty to-server must say nothing to send (got '$out')" ;; esac
+mkdir -p "$tool/tunnels/to-server/dir"
+printf 'p\n' >"$tool/tunnels/to-server/a file"; printf 'q\n' >"$tool/tunnels/to-server/dir/b"; printf 'h\n' >"$tool/tunnels/to-server/.hidden"
+out="$(printf 'in\nno\n' | PATH="$srv/bin:$PATH" bash "$tool/scripts/send-files" 2>&1)" && fail "send must refuse a missing folder it was not told to create"
+[ -e "$home/in" ] && fail "send must not create a folder without a yes"
+out="$(printf 'in\nyes\nc' | PATH="$srv/bin:$PATH" bash "$tool/scripts/send-files" 2>&1)" || fail "send must copy into a created folder (got '$out')"
+[ "$(cat "$home/in/a file")" = "p" ] && [ "$(cat "$home/in/dir/b")" = "q" ] && [ -e "$home/in/.hidden" ] || fail "send must carry every file, hidden and nested ones too"
+[ -e "$tool/tunnels/to-server/a file" ] || fail "a copy must leave to-server as it was"
+out="$(printf '~/in2\nyes\nM' | PATH="$srv/bin:$PATH" bash "$tool/scripts/send-files" 2>&1)" || fail "send must move (got '$out')"
+[ -e "$home/in2/dir/b" ] || fail "a move must carry the files"
+[ -z "$(ls -A "$tool/tunnels/to-server")" ] || fail "a move must empty to-server"
+[ -d "$tool/tunnels/to-server" ] || fail "a move must leave to-server itself"
+unset FAKE_SRV
+ok "tunnels"
 
 echo "all checks passed"

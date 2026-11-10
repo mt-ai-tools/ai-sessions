@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Brings the files of a folder on the server to this machine, into
+# tunnels/from-server. Asks for the folder the way add-claude asks for
+# one, then C to copy or M to move: a copy leaves the server's folder as
+# it was, a move empties it once everything has arrived here. The folder
+# itself stays on the server either way; what is in it is what is carried.
+# A file here under the same name is replaced.
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root="$(cd "$here/.." && pwd)"
+. "$root/helpers/config.sh"
+. "$root/helpers/remote.sh"
+. "$root/helpers/tunnels.sh"
+
+load_config
+make_tunnel_dirs
+wipe
+echo "Files from a folder on $SERVER into tunnels/from-server."
+echo
+dir="$(ask_remote_folder "folder on the server: ")"
+
+# One reach says where the folder is, what home is there, and how much it
+# holds. Its stdin is closed, so it never takes a key meant for the
+# question after it.
+status=0
+info="$(remote_run "$(remote_dir_expr "$dir"); cd -- \"\$d\" 2>/dev/null || exit 1; pwd; printf '%s\n' \"\$HOME\"; ls -A | grep -vxF $(printf %q "$TUNNEL_SKIP") | wc -l" </dev/null)" || status=$?
+if [ "$status" -eq "$SSH_LINK_LOST" ]; then
+  echo "ai-sessions: could not reach $SERVER" >&2
+  exit 1
+elif [ "$status" -ne 0 ] || [ -z "$info" ]; then
+  echo "ai-sessions: no such folder on the server: $dir" >&2
+  exit 1
+fi
+{ IFS= read -r resolved; IFS= read -r remote_home; read -r count; } <<<"$info"
+if [ "${count:-0}" -eq 0 ]; then
+  echo "ai-sessions: $resolved on the server is empty — nothing to bring"
+  exit 0
+fi
+echo "$resolved holds $count item(s)."
+mode="$(ask_copy_or_move)"
+# A move empties the folder, so the home folder and the root are never
+# moved from: one keypress would otherwise clear the server's user.
+if [ "$mode" = "move" ] && { [ "$resolved" = "/" ] || [ "$resolved" = "$remote_home" ]; }; then
+  echo "ai-sessions: will not move everything out of $resolved — copy it, or name a folder inside it" >&2
+  exit 1
+fi
+
+q="$(printf %q "$resolved")"
+remote_run "cd -- $q && tar cf - --exclude=$(printf %q "$TUNNEL_SKIP") ." </dev/null \
+  | tar xvf - -C "$FROM_SERVER_DIR"
+if [ "$mode" = "move" ]; then
+  # Only reached once the stream arrived whole and unpacked: pipefail
+  # stops the script on a lost link or a tar that failed on either end.
+  remote_run "cd -- $q && find . -mindepth 1 -maxdepth 1 ! -name $(printf %q "$TUNNEL_SKIP") -exec rm -rf -- {} +" </dev/null
+  echo "moved $count item(s) from $resolved on the server into $FROM_SERVER_DIR"
+else
+  echo "copied $count item(s) from $resolved on the server into $FROM_SERVER_DIR"
+fi

@@ -139,6 +139,19 @@ share a window, so what is forwarded is exactly the port windows you see,
 and closing a session touches no port. A lost link is mended the way a
 session's is, and the port comes back with it.
 
+`scripts/receive-files` and `scripts/send-files` carry files between
+the server and the `tunnels` folder beside `sessions`. receive-files asks
+for a folder on the server, the way add-claude asks for one, and brings
+what is in it into `tunnels/from-server`. send-files takes what is in
+`tunnels/to-server` to a folder on the server, offering to create one the
+server does not have. Each then asks for one key: C copies, M moves. A
+move empties the folder the files came from once they have all arrived,
+and leaves the folder itself; the server's home folder, or its root, is
+never moved from. A file already there under the same name is replaced.
+The files ride through the same ssh as everything else, so the server
+needs nothing more. Both folders are made when either script first runs,
+and are ignored by version control.
+
 Open the files in a terminal. The window's title bar carries the tmux
 name, so two windows into two sessions are told apart at the top; tmux
 sets it on every attach, whether the window came from add-claude, add-shell or from

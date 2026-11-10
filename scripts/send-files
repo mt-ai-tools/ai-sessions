@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Carries what is in tunnels/to-server to a folder on the server. Asks
+# for the folder the way add-claude asks for one — a folder the server
+# does not have is offered to be created — then C to copy or M to move: a
+# copy leaves to-server as it was, a move empties it once everything has
+# arrived on the server. A file there under the same name is replaced.
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root="$(cd "$here/.." && pwd)"
+. "$root/helpers/config.sh"
+. "$root/helpers/remote.sh"
+. "$root/helpers/tunnels.sh"
+
+load_config
+make_tunnel_dirs
+wipe
+entries=()
+while IFS= read -r entry; do entries+=("$entry"); done < <(to_server_entries)
+if [ "${#entries[@]}" -eq 0 ]; then
+  echo "ai-sessions: $TO_SERVER_DIR is empty — nothing to send"
+  exit 0
+fi
+echo "${#entries[@]} item(s) in tunnels/to-server, to a folder on $SERVER."
+echo
+dir="$(ask_remote_folder "folder on the server: ")"
+
+status=0
+resolved="$(resolve_remote_dir "$dir" </dev/null)" || status=$?
+if [ "$status" -eq "$SSH_LINK_LOST" ]; then
+  echo "ai-sessions: could not reach $SERVER" >&2
+  exit 1
+elif [ "$status" -ne 0 ]; then
+  echo "ai-sessions: no such folder on the server: $dir"
+  read -r -p "create it? (yes/no): " answer || answer=""
+  if [ "$answer" != "yes" ]; then
+    echo "ai-sessions: nothing sent" >&2
+    exit 1
+  fi
+  make_remote_dir "$dir" </dev/null
+  resolved="$(resolve_remote_dir "$dir" </dev/null)"
+fi
+mode="$(ask_copy_or_move)"
+
+pack=()
+while IFS= read -r option; do pack+=("$option"); done < <(local_pack_options)
+COPYFILE_DISABLE=1 tar cvf - ${pack[@]+"${pack[@]}"} --exclude="$TUNNEL_SKIP" -C "$TO_SERVER_DIR" -- "${entries[@]}" \
+  | remote_run "cd -- $(printf %q "$resolved") && tar xf -"
+if [ "$mode" = "move" ]; then
+  # Only reached once the server unpacked the stream whole: pipefail stops
+  # the script on a lost link or a tar that failed on either end. Only
+  # what was sent is removed; anything put here since stays.
+  for entry in "${entries[@]}"; do rm -rf -- "${TO_SERVER_DIR:?}/$entry"; done
+  echo "moved ${#entries[@]} item(s) from $TO_SERVER_DIR to $resolved on the server"
+else
+  echo "copied ${#entries[@]} item(s) from $TO_SERVER_DIR to $resolved on the server"
+fi
