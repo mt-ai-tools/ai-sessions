@@ -162,7 +162,8 @@ whole title still ends in the session's name.
 
 After the name, a dot says what the session's Claude is doing: 🔵
 working, 🔴 waiting on you — a question asked, a permission, a plan to
-approve — 🟢 done, and 🟠 stopped, a turn you broke off with escape. So a
+approve — 🟢 done, 🟣 done while background work still runs, and 🟠
+stopped, a turn you broke off with escape. So a
 row of tabs shows at a glance which ones want you. tmux's status line, at
 the foot of the window, takes the same colours. No dot means Claude has
 ended there, or was started without the dot. Claude says its state
@@ -176,9 +177,12 @@ never rests, and once a working session's screen has been still for five
 seconds, the turn is over — green, or orange when it was broken off.
 Both arrive those few seconds late. A turn that ends while agents it
 started work on in the background, or while commands those agents
-started still run, stays blue until they finish, however long that
-takes, and Claude has taken up what they did; a command Claude itself
-left running, such as a server, does not hold it. A session started before the
+started still run, is purple instead of green: the turn is over and you
+can write, but Claude may carry on by itself once they finish. It stays
+purple for as long as they run, however long that takes, then turns
+green, or blue when Claude takes up what they did. A tab purple for
+hours is worth a look: something may be stuck. A command Claude itself
+left running, such as a server, does not count. A session started before the
 dot, or by hand, shows none until it is started again with add-claude.
 
 The sessions folder is as fresh as the last time watch asked. A tmux

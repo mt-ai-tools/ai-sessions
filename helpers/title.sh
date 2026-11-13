@@ -7,7 +7,8 @@
 #
 # After the name, a dot says what the session's Claude is doing, as
 # its hooks store it (see state.sh): blue working, red waiting on you,
-# green done, orange stopped — a turn you broke off. At the end, since a
+# green done, purple done while work an agent started still runs, orange
+# stopped — a turn you broke off. At the end, since a
 # tab too narrow for its title keeps the end of it. No dot is a session
 # whose Claude has ended, or was started without the hooks. tmux's status
 # line, at the foot of the window, takes the same colours, the blue muted,
@@ -15,8 +16,8 @@
 # green.
 
 # The dot, and the status line's colours, for the word on the session.
-TITLE_FORMAT='#S#{?#{==:#{@claude},working}, 🔵,#{?#{==:#{@claude},waiting}, 🔴,#{?#{==:#{@claude},done}, 🟢,#{?#{==:#{@claude},stopped}, 🟠,}}}}'
-STATUS_STYLE='#{?#{==:#{@claude},working},bg=colour24 fg=white,#{?#{==:#{@claude},waiting},bg=red fg=white,#{?#{==:#{@claude},done},bg=colour28 fg=white,#{?#{==:#{@claude},stopped},bg=colour208 fg=black,bg=green fg=black}}}}'
+TITLE_FORMAT='#S#{?#{==:#{@claude},working}, 🔵,#{?#{==:#{@claude},waiting}, 🔴,#{?#{==:#{@claude},done}, 🟢,#{?#{==:#{@claude},background}, 🟣,#{?#{==:#{@claude},stopped}, 🟠,}}}}}'
+STATUS_STYLE='#{?#{==:#{@claude},working},bg=colour24 fg=white,#{?#{==:#{@claude},waiting},bg=red fg=white,#{?#{==:#{@claude},done},bg=colour28 fg=white,#{?#{==:#{@claude},background},bg=colour91 fg=white,#{?#{==:#{@claude},stopped},bg=colour208 fg=black,bg=green fg=black}}}}}'
 
 # Appended to the tmux command that attaches. The backslashed semicolons
 # reach tmux as command separators after the server's shell reads them.

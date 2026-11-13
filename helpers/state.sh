@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Each session says what its Claude is doing: working, waiting on you,
-# done, or stopped — a turn you broke off with escape. Claude says most of
+# done, done with background work still running, or stopped — a turn you
+# broke off with escape. Claude says most of
 # it itself, through hooks it runs at those moments, and each hook stores
 # the word on the session's tmux options; the title bar and tmux's status
 # line show it, see title.sh. The hooks are handed to Claude as it starts,
@@ -23,9 +24,12 @@
 QUIET_SECONDS=5
 
 # A turn can end while agents it started work on in the background, or
-# while commands those agents started still run. Claude takes up their
-# results when they finish, so the session is working until then, however
-# still its screen. Each Stop hook is told what still runs; commands
+# while commands those agents started still run. The turn is over all the
+# same — you can write, and the session is not working on you — but Claude
+# may take up their results by itself when they finish. So the session
+# reads as background until then, however still its screen, and done once
+# it all has finished; when Claude takes the results up, its hooks make it
+# working again. Each Stop hook is told what still runs; commands
 # Claude itself left running, a server say, it is not waiting on, and they
 # do not count. Whether it all still runs is then asked of the thing
 # itself, not of a clock, since a command may rightly run for hours: an
@@ -88,12 +92,13 @@ INTERRUPTED_TEST='tail -n 30 "$t" 2>/dev/null | grep '"'"'^{"parentUuid"'"'"' | 
 
 # Whether background work the last Stop hook found still runs: a command
 # an agent started, its output file, tasks/<id>.output, still open in
-# Claude or a process under it; or an agent whose transcript, beside the
+# Claude or a process under it — and when tmux cannot name Claude's
+# process this once, it is taken to run, since the next round asks again; or an agent whose transcript, beside the
 # session's own, was written lately. Linux names a process's open files
 # under /proc; elsewhere lsof does.
 BACKGROUND_TEST='{ x="$(tmux show-options -v -t "$P" '"$SHELLS_OPTION"' 2>/dev/null)"; h=""
   if [ -n "$x" ]; then
-    q="$(tmux display-message -p -t "$P" "#{pane_pid}" 2>/dev/null)"; k="$q"
+    q="$(tmux display-message -p -t "$P" "#{pane_pid}" 2>/dev/null)"; k="$q"; [ -n "$q" ] || h=1
     for n in 1 2 3; do q="$(for c in $q; do pgrep -P "$c"; done 2>/dev/null)"; k="$k $q"; done
     o="$(for c in $k; do ls -l "/proc/$c/fd" 2>/dev/null || lsof -Fn -p "$c" 2>/dev/null; done)"
     for c in $x; do case "$o" in *"/$c.output"*) h=1;; esac; done
@@ -101,20 +106,23 @@ BACKGROUND_TEST='{ x="$(tmux show-options -v -t "$P" '"$SHELLS_OPTION"' 2>/dev/n
   [ -n "$h" ] || { t="$(tmux show-options -v -t "$P" '"$TRANSCRIPT_OPTION"' 2>/dev/null)"
     [ -n "$t" ] && [ -n "$(find "${t%.jsonl}/subagents" -name "*.jsonl" -mmin -'"$AGENT_QUIET_MINUTES"' 2>/dev/null | head -n 1)" ]; }; }'
 
-# The watch, every two seconds for as long as the session is working. It
-# ends by itself the moment the session is anything else, or gone.
+# The watch, every two seconds for as long as the session is working or
+# its background work runs. It ends by itself the moment the session is
+# anything else, or gone. A turn broken off reads as stopped whatever
+# still runs: you broke it off, so it is yours either way.
 WATCH_LOOP='while sleep 2; do
-  [ "$(tmux show-options -v -t "$P" '"$STATE_OPTION"' 2>/dev/null)" = working ] || break
+  c="$(tmux show-options -v -t "$P" '"$STATE_OPTION"' 2>/dev/null)"
+  case "$c" in working|background) ;; *) break;; esac
   a="$(tmux display-message -p -t "$P" "#{window_activity}" 2>/dev/null)"; [ -n "$a" ] || break
-  [ $(($(date +%s) - a)) -ge '"$QUIET_SECONDS"' ] || continue
-  b="$(tmux show-options -v -t "$P" '"$BACKGROUND_OPTION"' 2>/dev/null)"
-  if [ -n "$b" ]; then '"$BACKGROUND_TEST"' && continue; fi
+  [ "$c" = background ] || [ $(($(date +%s) - a)) -ge '"$QUIET_SECONDS"' ] || continue
   s=stopped
   if [ "$(tmux show-options -v -t "$P" '"$STOP_OPTION"' 2>/dev/null)" = 1 ]; then
     s=done; t="$(tmux show-options -v -t "$P" '"$TRANSCRIPT_OPTION"' 2>/dev/null)"
     if '"$INTERRUPTED_TEST"'; then s=stopped; fi
   fi
-  '"$SET_STATE"'; break
+  if [ "$s" = done ] && [ -n "$(tmux show-options -v -t "$P" '"$BACKGROUND_OPTION"' 2>/dev/null)" ] && '"$BACKGROUND_TEST"'; then s=background; fi
+  [ "$s" = "$c" ] || '"$SET_STATE"'
+  [ "$s" = background ] || break
 done'
 
 # Starts the watch unless one already runs. It lets go of Claude's output

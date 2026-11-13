@@ -483,8 +483,8 @@ busy; run_hook Stop "{\"transcript_path\":\"$tmp/broken.jsonl\"}" >/dev/null; st
 [ "$(opt @claude)" = stopped ] || fail "a turn the transcript says was broken off must read as stopped (got '$(opt @claude)')"
 busy; run_hook Stop "{\"transcript_path\":\"$tmp/whole.jsonl\"}" >/dev/null; run_hook PostToolUse '{}' >/dev/null; still; sleep 3
 [ "$(opt @claude)" = stopped ] || fail "a still window with no Stop hook since the last work must read as stopped (got '$(opt @claude)')"
-# Background work the Stop hook is told of holds the session working for
-# as long as it runs, however long: an agent's command while a process
+# Background work the Stop hook is told of holds the session in
+# background, not done, for as long as it runs, however long: an agent's command while a process
 # under Claude holds its output file open, an agent while its transcript
 # is written. Claude's own command, one the Stop hook says nothing of, and
 # work gone without a hook to say so hold nothing.
@@ -495,20 +495,29 @@ running='{"transcript_path":"'"$tmp/whole.jsonl"'","background_tasks":[{"id": "b
 busy; run_hook UserPromptSubmit '{}' >/dev/null
 run_hook PostToolUse '{"agent_id": "a1", "tool_response": {"backgroundTaskId": "bagent1"}}' >/dev/null
 run_hook Stop "$running" >/dev/null; still; sleep 3
-[ "$(opt @claude)" = working ] || fail "a still window must stay working while a command an agent started runs (got '$(opt @claude)')"
+[ "$(opt @claude)" = background ] || fail "a still window must read as background while a command an agent started runs (got '$(opt @claude)')"
 echo $(( $(date +%s) - 7200 )) >"$tmp/opts/@claude_background"; sleep 3
-[ "$(opt @claude)" = working ] || fail "a command an agent started must hold the session working past any clock (got '$(opt @claude)')"
+[ "$(opt @claude)" = background ] || fail "a command an agent started must hold the session in background past any clock (got '$(opt @claude)')"
+busy; sleep 3
+[ "$(opt @claude)" = background ] || fail "a window redrawn while only background work runs must stay background (got '$(opt @claude)')"
+run_hook PreToolUse '{"tool_name":"Bash"}' >/dev/null
+[ "$(opt @claude)" = working ] || fail "Claude taking up background work must read as working again (got '$(opt @claude)')"
+run_hook Stop "$running" >/dev/null; still; sleep 3
+[ "$(opt @claude)" = background ] || fail "a turn over while the command still runs must read as background again (got '$(opt @claude)')"
 pkill -P "$claude_pid" sleep; wait "$claude_pid" 2>/dev/null; sleep 3
 [ "$(opt @claude)" = done ] || fail "a command an agent started that is gone, with no hook to say so, must let the session be done (got '$(opt @claude)')"
 running='{"transcript_path":"'"$tmp/whole.jsonl"'","background_tasks":[{"id": "a1", "type": "subagent", "status": "running"}]}'
 : >"$tmp/whole/subagents/agent-a1.jsonl"
 busy; run_hook UserPromptSubmit '{}' >/dev/null; run_hook Stop "$running" >/dev/null; still; sleep 3
-[ "$(opt @claude)" = working ] || fail "a still window must stay working while an agent's transcript is written (got '$(opt @claude)')"
+[ "$(opt @claude)" = background ] || fail "a still window must read as background while an agent's transcript is written (got '$(opt @claude)')"
 touch -t "$(date -r $(( $(date +%s) - 3600 )) +%Y%m%d%H%M 2>/dev/null || date -d @$(( $(date +%s) - 3600 )) +%Y%m%d%H%M)" "$tmp/whole/subagents/agent-a1.jsonl"; sleep 3
 [ "$(opt @claude)" = done ] || fail "an agent whose transcript has long gone unwritten must let the session be done (got '$(opt @claude)')"
 running='{"transcript_path":"'"$tmp/whole.jsonl"'","background_tasks":[{"id": "bown1", "type": "shell", "status": "running"}]}'
 busy; run_hook UserPromptSubmit '{}' >/dev/null; run_hook Stop "$running" >/dev/null; still; sleep 3
-[ "$(opt @claude)" = done ] || fail "a command Claude itself left running must not hold the session working (got '$(opt @claude)')"
+[ "$(opt @claude)" = done ] || fail "a command Claude itself left running must not hold the session in background (got '$(opt @claude)')"
+busy; run_hook Stop "{\"transcript_path\":\"$tmp/broken.jsonl\",\"background_tasks\":[{\"id\": \"a1\", \"type\": \"subagent\", \"status\": \"running\"}]}" >/dev/null
+mkdir -p "$tmp/broken/subagents"; : >"$tmp/broken/subagents/agent-a1.jsonl"; still; sleep 3
+[ "$(opt @claude)" = stopped ] || fail "a turn broken off must read as stopped though an agent still works (got '$(opt @claude)')"
 rm -f "$FAKE_PANE_PID" "$tmp/opts/@claude_background" "$tmp/opts/@claude_agent_shells"
 # One watch at a time, and it ends when the session is no longer working.
 busy; run_hook UserPromptSubmit '{}' >/dev/null; w="$(opt @claude_watch)"; run_hook PostToolUse '{}' >/dev/null
