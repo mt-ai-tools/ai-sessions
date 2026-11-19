@@ -31,11 +31,11 @@ if [ "$status" -eq "$SSH_LINK_LOST" ]; then
   exit 1
 elif [ "$status" -ne 0 ]; then
   echo "ai-sessions: no such folder on the server: $dir"
-  read -r -p "create it? (yes/no): " answer || answer=""
-  if [ "$answer" != "yes" ]; then
+  read -r -p "create it? (y/n): " answer || answer=""
+  case "$answer" in [yY]|[yY][eE][sS]) ;; *)
     echo "ai-sessions: nothing sent" >&2
-    exit 1
-  fi
+    exit 1 ;;
+  esac
   make_remote_dir "$dir" </dev/null
   resolved="$(resolve_remote_dir "$dir" </dev/null)"
 fi
