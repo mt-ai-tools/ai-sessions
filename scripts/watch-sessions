@@ -8,9 +8,10 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/.." && pwd)"
 . "$root/helpers/config.sh"
 . "$root/helpers/remote.sh"
+. "$root/helpers/auto-restore.sh"
 
 load_config
-export SERVER TMUX_SESSIONS="${TMUX_SESSIONS:-}" TAILSCALE_NODE="${TAILSCALE_NODE:-}" NUMBER_SESSIONS="${NUMBER_SESSIONS:-}"
+export SERVER TMUX_SESSIONS="${TMUX_SESSIONS:-}" TAILSCALE_NODE="${TAILSCALE_NODE:-}" NUMBER_SESSIONS="${NUMBER_SESSIONS:-}" AUTO_RESTORE="${AUTO_RESTORE:-}"
 
 # Names the window after the server, so a terminal's tab says what it is
 # watching instead of which process it is running.
@@ -21,7 +22,11 @@ printf '\033]0;%s\007' "tmux sessions on $SERVER"
 header() {
   local labels=("tmux sessions on" "refreshed at" "refresh rate")
   local values=("$SERVER" "$(date '+%H:%M:%S')" "${REFRESH_SECONDS}s")
-  local width=0 i
+  local width=0 i last
+  if [ "$AUTO_RESTORE" = "true" ]; then
+    last="$(auto_restore_last)"
+    labels+=("auto-restore"); values+=("on${last:+, last $last}")
+  fi
   for i in "${labels[@]}"; do [ ${#i} -gt $width ] && width=${#i}; done
   for i in "${!labels[@]}"; do printf '%-*s  %s\n' "$((width + 1))" "${labels[$i]}:" "${values[$i]}"; done
 }
@@ -30,6 +35,7 @@ while true; do
   wipe
   header
   echo
+  auto_restore
   bash "$root/helpers/refresh.sh" || true
   sleep "$REFRESH_SECONDS"
 done

@@ -207,11 +207,23 @@ no transcript to resume. Type `yes` and each comes back under its own
 tmux name, in its folder, resuming its own conversation, with its dot, in
 the order the sessions were first started, so the numbered files keep
 their places. The sessions folder is then rewritten and, on macOS, each
-restored session's file is opened in Terminal again. `--yes` skips the
+restored session's file is opened in Terminal again — except where the
+session's old window is still open: a window whose link was lost to the
+restart does not close when it finds its session gone, but waits, and
+attaches again by itself once the session is back, its scrollback intact. `--yes` skips the
 question, `--no-open` the windows.
 
 Run it again and it starts only what is still missing; a server that
 froze rather than rebooted keeps its sessions, and it finds nothing to do.
+With `AUTO_RESTORE="true"` in the config, `watch-sessions` does this by
+itself: each round it asks the server for its boot id, and the first round
+that reaches a boot it has not seen runs the restore with `--yes`, once.
+There is no wait to set — a server just up fails rounds like any lost link
+until ssh answers, and the next round that gets in restores. A session you
+end later in that boot stays ended. Nothing happens while no watch runs;
+the header shows the setting and what the last automatic restore did. The
+sample ships it `"false"`.
+
 Sessions started with `add-shell` are not brought back: nothing records
 them. The records are Claude Code's own and undocumented, so a later
 Claude may change them; a record that does not read is skipped and said.

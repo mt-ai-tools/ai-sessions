@@ -7,8 +7,9 @@
 # server does not notice. So when ssh ends that way, this waits and
 # attaches again, as often as it takes — see reconnect.sh for the wait —
 # and the window is back in its session moments after the lid opens.
-# Detaching on purpose, or the session being gone from the server, ends
-# it as before.
+# Detaching on purpose, or the session ending, ends it as before. A
+# session lost because the server restarted is waited for instead, and
+# attached again once restore-sessions brings it back: see waiting.sh.
 #
 # A link lost mid-session also leaves this terminal as the session had it,
 # since what switches the terminal's modes on is the program on the server,
@@ -26,6 +27,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/remote.sh"
 . "$here/title.sh"
 . "$here/reconnect.sh"
+. "$here/waiting.sh"
 
 # Puts the terminal back to how it was before the session had it. A program
 # in the session — claude among them — switches on mouse reporting and
@@ -54,7 +56,16 @@ load_config
 while true; do
   status=0
   reconnect_reach remote_terminal "tmux -u attach -t $(printf %q "$name") $TMUX_TITLE_COMMANDS" || status=$?
-  [ "$status" -eq "$SSH_LINK_LOST" ] || exit "$status"
-  settle_terminal
-  reconnect_wait "session $name goes on there"
+  if [ "$status" -eq "$SSH_LINK_LOST" ]; then
+    settle_terminal
+    reconnect_wait "session $name goes on there"
+    continue
+  fi
+  # The link came back but the session did not: if the server restarted
+  # since the link was lost, the session is waited for, not given up on.
+  if [ "$status" -ne 0 ] && [ -n "$reconnect_down_since" ] && server_booted_since "$reconnect_down_since"; then
+    wait_for_restore "$name"
+    continue
+  fi
+  exit "$status"
 done

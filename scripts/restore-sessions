@@ -7,7 +7,8 @@
 # resuming its own conversation, with the dot in its title, and in the
 # order the sessions were first started, so the numbered files keep their
 # places. Then the sessions folder is rewritten, and on macOS each restored
-# session's file is opened in Terminal again.
+# session's file is opened in Terminal again — unless its old window is
+# still open and waiting for it, which then attaches by itself.
 #
 # What it would start is shown first and asked about; nothing starts
 # without a yes. Run more than once, it starts only what is still missing:
@@ -24,6 +25,7 @@ root="$(cd "$here/.." && pwd)"
 . "$root/helpers/remote.sh"
 . "$root/helpers/sessions-dir.sh"
 . "$root/helpers/state.sh"
+. "$root/helpers/waiting.sh"
 
 # What each restored session runs: claude resuming its conversation, from
 # a login shell for the server's PATH, with the hooks that give the title
@@ -110,6 +112,9 @@ bash "$root/helpers/refresh.sh" >/dev/null || echo "ai-sessions: the sessions fo
 
 if [ "$open_files" -eq 1 ] && [ "$(uname)" = "Darwin" ]; then
   while IFS="$tab" read -r _ ms name dir sid; do
+    # A window still open on this session waits for it and attaches by
+    # itself; a second one is not opened.
+    waiting_window_alive "$name" && continue
     for file in "$SESSIONS_DIR/$name$SESSION_FILE_SUFFIX" "$SESSIONS_DIR"/[0-9][0-9][0-9]" $name$SESSION_FILE_SUFFIX"; do
       [ -x "$file" ] && open -a Terminal "$file" && break
     done

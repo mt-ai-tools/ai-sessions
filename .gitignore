@@ -2,3 +2,4 @@
 config
 sessions/
 tunnels/
+.restored-boot

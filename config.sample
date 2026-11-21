@@ -28,3 +28,9 @@ NUMBER_SESSIONS="true"
 # say why a link is lost, and check the server before a trip. Empty means
 # Tailscale is never asked anything.
 TAILSCALE_NODE=""
+
+# Whether watch-sessions brings the server's Claude sessions back by itself
+# after the server restarts, as restore-sessions would with a yes: once per
+# boot, on the first round the server answers again, so there is no wait
+# to set. Only while a watch runs. Anything but "true" leaves it to you.
+AUTO_RESTORE="false"
