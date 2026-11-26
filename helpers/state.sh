@@ -23,17 +23,17 @@
 # last work, stopped if not, or if the transcript says it was broken off.
 QUIET_SECONDS=5
 
-# A turn can end while agents it started work on in the background, or
-# while commands those agents started still run. The turn is over all the
+# A turn can end while work it started still runs in the background: an
+# agent, a command, a monitor — Claude's own or one an agent started. The turn is over all the
 # same — you can write, and the session is not working on you — but Claude
 # may take up their results by itself when they finish. So the session
 # reads as background until then, however still its screen, and done once
 # it all has finished; when Claude takes the results up, its hooks make it
-# working again. Each Stop hook is told what still runs; commands
-# Claude itself left running, a server say, it is not waiting on, and they
-# do not count. Whether it all still runs is then asked of the thing
-# itself, not of a clock, since a command may rightly run for hours: an
-# agent's command runs for as long as a process holds its output file
+# working again. Each Stop hook is told what still runs, and all of it
+# counts: a command that never ends, a server say, holds the session in
+# background for as long as it runs. Whether it all still runs is then asked of the thing
+# itself, not of a clock, since a command may rightly run for hours: a
+# command runs for as long as a process holds its output file
 # open, and an agent for as long as its transcript keeps being written —
 # at least once in this many minutes, since a command it waits on is cut
 # off after ten. Something killed with no hook to say so thus lets go of
@@ -44,13 +44,13 @@ AGENT_QUIET_MINUTES=15
 # shows its own Claude and no other: the word; whether a Stop hook has run
 # since the last work; the transcript, as the Stop hook was told it; the
 # watch's process, so a hook starts one only where none runs; the
-# background commands agents started, by id; and when a Stop hook last
+# background commands and monitors still running at the last stop, by id; and when a Stop hook last
 # found background work running, empty when it found none.
 STATE_OPTION='@claude'
 STOP_OPTION='@claude_stop'
 TRANSCRIPT_OPTION='@claude_transcript'
 WATCH_OPTION='@claude_watch'
-SHELLS_OPTION='@claude_agent_shells'
+SHELLS_OPTION='@claude_shells'
 BACKGROUND_OPTION='@claude_background'
 
 # What every hook starts with: the session Claude runs in, which tmux
@@ -63,22 +63,14 @@ HOOK_START='[ -n "$TMUX_PANE" ] || exit 0; P="$TMUX_PANE"'
 READ_INPUT='i="$(cat)"'
 FROM_AGENT='printf %s "$i" | grep -Eq '"'"'"agent_id": *"'"'"''
 
-# An agent's tool that left a command running in the background — a shell
-# command, a monitor — names it in its response; the name is kept.
-KEEP_AGENT_SHELL='if '"$FROM_AGENT"'; then
-  x="$(printf %s "$i" | sed -En '"'"'s/.*"(backgroundTaskId|taskId)": *"([^"]*)".*/\2/p'"'"')"
-  [ -z "$x" ] || tmux set-option -t "$P" '"$SHELLS_OPTION"' "$(tmux show-options -v -t "$P" '"$SHELLS_OPTION"' 2>/dev/null) $x" >/dev/null 2>&1
-fi'
-
-# Reads what a Stop hook is told still runs: an agent, or a command an
-# agent started, and the time is stored; nothing, and it is cleared.
+# Reads what a Stop hook is told still runs: an agent, a command or a
+# monitor, and the time is stored, with the commands' and monitors' ids;
+# nothing, and both are cleared.
 NOTE_BACKGROUND='r="$(printf %s "$i" | grep -o '"'"'"id": *"[^"]*", *"type": *"[^"]*", *"status": *"running"'"'"')"; b=""
-if printf %s "$r" | grep -q '"'"'"type": *"subagent"'"'"'; then b=1; else
-  o=" $(tmux show-options -v -t "$P" '"$SHELLS_OPTION"' 2>/dev/null) "
-  for x in $(printf %s "$r" | grep '"'"'"type": *"shell"'"'"' | sed '"'"'s/^"id": *"\([^"]*\)".*/\1/'"'"'); do
-    case "$o" in *" $x "*) b=1;; esac
-  done
-fi
+x="$(printf %s "$r" | grep -E '"'"'"type": *"(shell|monitor)"'"'"' | sed '"'"'s/^"id": *"\([^"]*\)".*/\1/'"'"' | tr "\n" " ")"
+if [ -n "$x" ]; then b=1; tmux set-option -t "$P" '"$SHELLS_OPTION"' "$x" >/dev/null 2>&1
+else tmux set-option -u -t "$P" '"$SHELLS_OPTION"' >/dev/null 2>&1; fi
+printf %s "$r" | grep -q '"'"'"type": *"subagent"'"'"' && b=1
 if [ -n "$b" ]; then tmux set-option -t "$P" '"$BACKGROUND_OPTION"' "$(date +%s)" >/dev/null 2>&1
 else tmux set-option -u -t "$P" '"$BACKGROUND_OPTION"' >/dev/null 2>&1; fi'
 
@@ -91,7 +83,7 @@ SET_STATE='tmux set-option -t "$P" '"$STATE_OPTION"' "$s" >/dev/null 2>&1'
 INTERRUPTED_TEST='tail -n 30 "$t" 2>/dev/null | grep '"'"'^{"parentUuid"'"'"' | grep -v '"'"'"type":"system"'"'"' | tail -n 1 | grep -qF "[Request interrupted by user"'
 
 # Whether background work the last Stop hook found still runs: a command
-# an agent started, its output file, tasks/<id>.output, still open in
+# or a monitor, its output file, tasks/<id>.output, still open in
 # Claude or a process under it — and when tmux cannot name Claude's
 # process this once, it is taken to run, since the next round asks again; or an agent whose transcript, beside the
 # session's own, was written lately. Linux names a process's open files
@@ -146,10 +138,6 @@ exit 0'
 WORK="$HOOK_START"'; '"$READ_INPUT"'
 '"$WORK_BODY"
 
-# A tool done: work, and a command an agent left running is kept.
-TOOL_DONE="$HOOK_START"'; '"$READ_INPUT"'
-'"$KEEP_AGENT_SHELL"'
-'"$WORK_BODY"
 
 
 # A Stop hook: the turn may be ending, which the watch will tell. Until
@@ -207,7 +195,7 @@ claude_state_settings() {
   printf '{"hooks":{%s,%s,%s,%s,%s,%s,%s,%s}}' \
     "$(hook_entry UserPromptSubmit "$WORK")" \
     "$(hook_entry PreToolUse "$TOOL")" \
-    "$(hook_entry PostToolUse "$TOOL_DONE")" \
+    "$(hook_entry PostToolUse "$WORK")" \
     "$(hook_entry Notification "$WAIT" 'permission_prompt|elicitation_dialog')" \
     "$(hook_entry Stop "$STOP")" \
     "$(hook_entry SubagentStop "$AGENT_STOP")" \

@@ -7,7 +7,7 @@
 #
 # After the name, a dot says what the session's Claude is doing, as
 # its hooks store it (see state.sh): blue working, red waiting on you,
-# green done, purple done while work an agent started still runs, orange
+# green done, purple done while background work it started still runs, orange
 # stopped — a turn you broke off. At the end, since a
 # tab too narrow for its title keeps the end of it. No dot is a session
 # whose Claude has ended, or was started without the hooks. tmux's status

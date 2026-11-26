@@ -175,14 +175,15 @@ sent while it was busy starts with no hook of its own, and escape runs
 none at all. So the screen settles it: while Claude works its spinner
 never rests, and once a working session's screen has been still for five
 seconds, the turn is over — green, or orange when it was broken off.
-Both arrive those few seconds late. A turn that ends while agents it
-started work on in the background, or while commands those agents
-started still run, is purple instead of green: the turn is over and you
-can write, but Claude may carry on by itself once they finish. It stays
-purple for as long as they run, however long that takes, then turns
-green, or blue when Claude takes up what they did. A tab purple for
-hours is worth a look: something may be stuck. A command Claude itself
-left running, such as a server, does not count. A session started before the
+Both arrive those few seconds late. A turn that ends while work it
+started still runs in the background — agents, commands, monitors,
+Claude's own or its agents' — is purple instead of green: the turn is
+over and you can write, but Claude may carry on by itself once they
+finish. It stays purple for as long as they run, however long that
+takes, then turns green, or blue when Claude takes up what they did. A
+tab purple for hours is worth a look: something may be stuck, or Claude
+left a command running that never ends, such as a server. A server you
+want beside a session belongs in its own session from add-shell. A session started before the
 dot, or by hand, shows none until it is started again with add-claude.
 
 The sessions folder is as fresh as the last time watch asked. A tmux
